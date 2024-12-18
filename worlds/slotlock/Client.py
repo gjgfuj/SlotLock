@@ -25,7 +25,7 @@ class SlotLockContext(CommonContext):
                          "locations": list(self.missing_locations)}]))
         if cmd == "ReceivedItems" or cmd == "Connected":
             victory = True
-            for i in range(len(self.player_names)):
+            for i, name in enumerate(self.player_names):
                 success = False
                 for item in self.items_received:
                     print(item)
