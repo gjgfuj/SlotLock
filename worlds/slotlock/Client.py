@@ -17,7 +17,12 @@ class SlotLockContext(CommonContext):
         await self.get_username()
         await self.send_connect()
     def update_auto_locations(self):
-        self.locations_checked = [location for location in self.missing_locations if location > 10000 or any(item.item == location // 10 for item in self.items_received)]
+        for location in self.missing_locations:
+            if location > 10000 or any(item.item == location // 10 for item in self.items_received):
+                self.locations_checked.add(location)
+            else:
+                print(f"Don't yet have {location}, required item {location // 10}")
+
     def on_package(self, cmd: str, args: dict):
         print(f"on_package: {cmd}, {args}")
         if cmd == "Connected":
@@ -25,20 +30,24 @@ class SlotLockContext(CommonContext):
             self.update_auto_locations()
             asyncio.create_task(self.send_msgs([{"cmd": "LocationChecks",
                          "locations": list(self.locations_checked)}]))
-        if cmd == "ReceivedItems" or cmd == "Connected":
+        if cmd == "ReceivedItems" or cmd == "Connected" or cmd == "RoomUpdate":
             self.update_auto_locations()
             asyncio.create_task(self.send_msgs([{"cmd": "LocationChecks",
                          "locations": list(self.locations_checked)}]))
             victory = True
-            for i, name in enumerate(self.player_names):
-                success = False
-                for item in self.items_received:
-                    print(item)
-                    if i == 0 or item.item == i:
-                        success = True
-                if not success:
-                    print(f"No victory without {self.player_names[i]}")
-                    victory = False
+            if len(self.missing_locations) > 0:
+                victory = False
+                print("Still locations left.")
+            else:
+                for i, name in enumerate(self.player_names):
+                    success = False
+                    for item in self.items_received:
+                        print(item)
+                        if i == 0 or item.item == i:
+                            success = True
+                    if not success:
+                        print(f"No victory without {self.player_names[i]}")
+                        victory = False
             if victory:
                 print("Victory!")
                 self.finished_game = True

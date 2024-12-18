@@ -63,7 +63,7 @@ class SlotLockWorld(AutoWorld.World):
     
     item_name_to_id = {f"Unlock_{num}": num + 10000 for num in range(50000)}
     for i in range(1000):
-            item_name_to_id[f"Unlock Bonus Slot {i+1}"] = i + 10
+            item_name_to_id[f"Unlock Bonus Slot {i+1}"] = i
             for j in range(10):
                 location_name_to_id[f"Bonus Slot {i+1}{" " + str(j+1) if j > 0 else ""}"] = i*10 + j
     def stage_generate_early(multiworld: "MultiWorld"): # type: ignore
@@ -142,7 +142,7 @@ class SlotLockWorld(AutoWorld.World):
         return "A Cool Filler Item (No Satisfaction Guaranteed)"
 
     def set_rules(self) -> None:
-        self.multiworld.completion_condition[self.player] = lambda state: state.has_all([f"Unlock {i}" for i in self.multiworld.player_name.values()], self.player)
+        self.multiworld.completion_condition[self.player] = lambda state: state.has_all([f"Unlock {i}" for i in self.multiworld.player_name.values()] + [f"Unlock Bonus Slot {i+1}" for i in range(self.options.bonus_item_slots.value)], self.player)
     def fill_slot_data(self):
         pass
     def post_fill(self) -> None:
