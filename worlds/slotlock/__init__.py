@@ -28,19 +28,19 @@ class NumberOfUnlocks(Range):
     default = 1
     range_start = 1
     range_end = 10
-class RandomStartOption(Toggle):
+class SlotsToLockWhitelistOption(Toggle):
+    """If the list of slots to lock should be treated as a blacklist rather than a whitelist. If true, will lock every slot listed. If false, will lock every slot except this one and any slot listed."""
+    default = 1
     pass
-    
 
 
 @dataclass
 class SlotLockOptions(PerGameCommonOptions):
     slots_to_lock: SlotsToLock
+    slots_whitelist: SlotsToLockWhitelistOption
     number_of_unlocks: NumberOfUnlocks
     start_inventory_from_pool: StartInventoryPool
 
-    # DeathLink is always on. Always.
-    # death_link: DeathLink
 
 class SlotLockWorld(AutoWorld.World):
     """Locks other player slots."""
@@ -69,9 +69,13 @@ class SlotLockWorld(AutoWorld.World):
         return LockItem(self,self.multiworld.world_name_lookup[slotName])
 
     def create_items(self) -> None:
+        if self.options.slots_whitelist.value:
+            slots_to_lock = self.options.slots_to_lock.value
+        else:
+            slots_to_lock = [slot.player_name for slot in self.multiworld.worlds.values() if slot.player_name not in self.options.slots_to_lock.value and slot.player_name != self.player_name]
         #(creating regions in create_items to run always after create_regions for everything else.)
         for world in self.multiworld.worlds.values():
-            if world.player_name in self.options.slots_to_lock.value:
+            if world.player_name in slots_to_lock:
                 currentOriginName = world.origin_region_name
                 world.origin_region_name = f"Lock {self.player}"
                 currentOrigin = world.get_region(currentOriginName)
@@ -86,7 +90,7 @@ class SlotLockWorld(AutoWorld.World):
                 world.options.progression_balancing.value = 0
         self.region = Region("Menu",self.player,self.multiworld)
         for world in self.multiworld.worlds.values():
-            if world.player_name in self.options.slots_to_lock.value:
+            if world.player_name in slots_to_lock:
                 for i in range(self.options.number_of_unlocks.value):
                     self.region.add_locations({f"Free Item {world.player_name} {i+1}": self.location_name_to_id[f"Free Item {world.player_name} {i+1}"]}, LockLocation)
                     self.multiworld.itempool.append(self.create_item(world.player_name))
