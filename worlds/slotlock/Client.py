@@ -16,14 +16,19 @@ class SlotLockContext(CommonContext):
             await super(TextContext, self).server_auth(password_requested)
         await self.get_username()
         await self.send_connect()
+    def update_auto_locations(self):
+        self.locations_checked = [location for location in self.missing_locations if location > 10000 or any(item.item == location // 10 for item in self.items_received)]
     def on_package(self, cmd: str, args: dict):
         print(f"on_package: {cmd}, {args}")
         if cmd == "Connected":
             self.game = self.slot_info[self.slot].game
-            print(self.missing_locations)
+            self.update_auto_locations()
             asyncio.create_task(self.send_msgs([{"cmd": "LocationChecks",
-                         "locations": list(self.missing_locations)}]))
+                         "locations": list(self.locations_checked)}]))
         if cmd == "ReceivedItems" or cmd == "Connected":
+            self.update_auto_locations()
+            asyncio.create_task(self.send_msgs([{"cmd": "LocationChecks",
+                         "locations": list(self.locations_checked)}]))
             victory = True
             for i, name in enumerate(self.player_names):
                 success = False
