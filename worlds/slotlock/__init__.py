@@ -7,9 +7,9 @@ from worlds import AutoWorld
 from worlds.generic import GenericWorld
 from worlds.LauncherComponents import Component, components, icon_paths, launch_subprocess, Type
 
-def launch_client():
+def launch_client(*args):
     from .Client import launch
-    launch_subprocess(launch, name="SlotLockClient")
+    launch_subprocess(launch, name="SlotLockClient", args=args)
 components.append(Component("Slot Lock Client", "SlotLockClient", func=launch_client,
                             component_type=Type.CLIENT))
 
