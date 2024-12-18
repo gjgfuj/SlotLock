@@ -69,6 +69,10 @@ class SlotLockWorld(AutoWorld.World):
         return LockItem(self,self.multiworld.world_name_lookup[slotName])
 
     def create_items(self) -> None:
+
+        if hasattr(self.multiworld, "generation_is_fake"):
+            # UT has no way to get the unlock items so just skip locking altogether
+            return
         if self.options.slots_whitelist.value:
             slots_to_lock = self.options.slots_to_lock.value
         else:
