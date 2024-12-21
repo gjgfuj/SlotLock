@@ -46,6 +46,11 @@ class BonusItemDupes(Range):
     default = 1
     range_start = 1
     range_end = 10
+class RandomUnlockedSlots(Range):
+    """Number of slots to randomly start with, from the slots that are locked."""
+    default = 0
+    range_start = 0
+    range_end = 100
 
 
 @dataclass
@@ -56,6 +61,7 @@ class SlotLockOptions(PerGameCommonOptions):
     bonus_item_slots: BonusItemSlots
     bonus_item_dupes: BonusItemDupes
     free_starting_items: FreeStartingItems
+    random_unlocked_slots: RandomUnlockedSlots
 
 
 class SlotLockWorld(AutoWorld.World):
@@ -103,6 +109,8 @@ class SlotLockWorld(AutoWorld.World):
             slots_to_lock = [slot for slot in self.options.slots_to_lock.value if slot in map(self.multiworld.worlds.values(), lambda w: w.player_name)]
         else:
             slots_to_lock = [slot.player_name for slot in self.multiworld.worlds.values() if slot.player_name not in self.options.slots_to_lock.value and slot.player_name != self.player_name]
+        for i in range(self.options.random_unlocked_slots.value):
+            slots_to_lock.remove(self.random.choice(slots_to_lock))
         print(f"{self.player_name}: Locking {slots_to_lock}")
         self.slots_to_lock = slots_to_lock
         #(creating regions in create_items to run always after create_regions for everything else.)
