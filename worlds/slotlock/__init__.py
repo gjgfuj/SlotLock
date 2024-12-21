@@ -16,7 +16,7 @@ components.append(Component("Slot Lock Client", "SlotLockClient", func=launch_cl
 class LockItem(Item):
     coin_suffix = ""
     def __init__(self, world: "SlotLockWorld", player: int):
-        Item.__init__(self,f"Unlock {world.multiworld.worlds[player].player_name}",ItemClassification.progression,player+10000,world.player)
+        Item.__init__(self,f"Unlock {world.multiworld.worlds[player].player_name}",ItemClassification.progression,player+1000,world.player)
 class LockLocation(Location):
     pass
 
@@ -30,6 +30,10 @@ class NumberOfUnlocks(Range):
     range_end = 10
 class SlotsToLockWhitelistOption(Toggle):
     """If the list of slots to lock should be treated as a blacklist rather than a whitelist. If true, will lock every slot listed. If false, will lock every slot except this one and any slot listed."""
+    default = 1
+    pass
+class FreeStartingItems(Toggle):
+    """If true, the free items should be sent out immediately, or if false the 'Unlock {slot_name}' item will be required. If false, it will require other worlds to be open in sphere 1 instead else there will be no worlds available."""
     default = 1
     pass
 class BonusItemSlots(Range):
@@ -51,6 +55,7 @@ class SlotLockOptions(PerGameCommonOptions):
     number_of_unlocks: NumberOfUnlocks
     bonus_item_slots: BonusItemSlots
     bonus_item_dupes: BonusItemDupes
+    free_starting_items: FreeStartingItems
 
 
 class SlotLockWorld(AutoWorld.World):
@@ -66,12 +71,12 @@ class SlotLockWorld(AutoWorld.World):
             item_name_to_id[f"Unlock Bonus Slot {i+1}"] = i
             for j in range(10):
                 location_name_to_id[f"Bonus Slot {i+1}{" " + str(j+1) if j > 0 else ""}"] = i*10 + j
-    def stage_generate_early(multiworld: "MultiWorld"): # type: ignore
-        cls = SlotLockWorld
+    @classmethod
+    def stage_generate_early(cls, multiworld: "MultiWorld"): # type: ignore
         item_name_to_id = {}
         location_name_to_id = {}
         for id, world in multiworld.worlds.items():
-            item_name_to_id[f"Unlock {world.player_name}"] = id + 10000
+            item_name_to_id[f"Unlock {world.player_name}"] = id + 1000
             for i in range(10):
                 location_name_to_id[f"Free Item {world.player_name} {i+1}"] = id*10 + i + 10000
         id = max(multiworld.worlds.keys())
@@ -87,7 +92,6 @@ class SlotLockWorld(AutoWorld.World):
     def create_slotlock_item(self, slotName: str) -> LockItem:
         return LockItem(self,self.multiworld.world_name_lookup[slotName])
     def create_bonus_key(self, bonusSlot: int) -> Item:
-        baseId = max(self.multiworld.worlds.keys()) + 10
         return Item(f"Unlock Bonus Slot {bonusSlot+1}", ItemClassification.progression,bonusSlot,self.player)
     def create_items(self) -> None:
         if hasattr(self.multiworld, "generation_is_fake"):
@@ -96,9 +100,11 @@ class SlotLockWorld(AutoWorld.World):
 
         #print(self.location_name_to_id)
         if self.options.slots_whitelist.value:
-            slots_to_lock = self.options.slots_to_lock.value
+            slots_to_lock = [slot for slot in self.options.slots_to_lock.value if slot in map(self.multiworld.worlds.values(), lambda w: w.player_name)]
         else:
             slots_to_lock = [slot.player_name for slot in self.multiworld.worlds.values() if slot.player_name not in self.options.slots_to_lock.value and slot.player_name != self.player_name]
+        print(f"{self.player_name}: Locking {slots_to_lock}")
+        self.slots_to_lock = slots_to_lock
         #(creating regions in create_items to run always after create_regions for everything else.)
         for world in self.multiworld.worlds.values():
             if world.player_name in slots_to_lock:
@@ -143,8 +149,16 @@ class SlotLockWorld(AutoWorld.World):
 
     def set_rules(self) -> None:
         self.multiworld.completion_condition[self.player] = lambda state: state.has_all([f"Unlock {i}" for i in self.multiworld.player_name.values()] + [f"Unlock Bonus Slot {i+1}" for i in range(self.options.bonus_item_slots.value)], self.player)
+        if not self.options.free_starting_items.value:
+            for slot in self.slots_to_lock:
+                for i in range(self.options.number_of_unlocks):
+                    def rule(state: CollectionState, slot=slot):
+                        return state.has(f"Unlock {slot}", self.player)
+                    self.get_location(f"Free Item {slot} {i+1}").access_rule = rule
     def fill_slot_data(self):
-        pass
+        return {
+            "free_starting_items": self.options.free_starting_items.value
+        }
     def post_fill(self) -> None:
         pass
 

@@ -18,18 +18,17 @@ class SlotLockContext(CommonContext):
         await self.send_connect()
     def update_auto_locations(self):
         for location in self.missing_locations:
-            if location > 10000 or any(item.item == location // 10 for item in self.items_received):
+            if any(item.item == location // 10 for item in self.items_received) or (location >= 10000 and self.free_starting_items):
                 self.locations_checked.add(location)
             else:
-                print(f"Don't yet have {location}, required item {location // 10}")
+                print(f"Don't yet have {self.location_names.lookup_in_game(location,"SlotLock")}, required item {self.item_names.lookup_in_game(location // 10)}")
 
     def on_package(self, cmd: str, args: dict):
         print(f"on_package: {cmd}, {args}")
         if cmd == "Connected":
             self.game = self.slot_info[self.slot].game
-            self.update_auto_locations()
-            asyncio.create_task(self.send_msgs([{"cmd": "LocationChecks",
-                         "locations": list(self.locations_checked)}]))
+            print(args["slot_data"])
+            self.free_starting_items = args["slot_data"]["free_starting_items"]
         if cmd == "ReceivedItems" or cmd == "Connected" or cmd == "RoomUpdate":
             self.update_auto_locations()
             asyncio.create_task(self.send_msgs([{"cmd": "LocationChecks",
