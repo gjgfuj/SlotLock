@@ -116,20 +116,6 @@ class SlotLockWorld(AutoWorld.World):
         print(f"{self.player_name}: Locking {slots_to_lock}")
         self.slots_to_lock = slots_to_lock
         #(creating regions in create_items to run always after create_regions for everything else.)
-        for world in self.multiworld.worlds.values():
-            if world.player_name in slots_to_lock:
-                currentOriginName = world.origin_region_name
-                world.origin_region_name = f"Lock {self.player}"
-                currentOrigin = world.get_region(currentOriginName)
-                region = Region(f"Lock {self.player}", world.player, self.multiworld)
-                def rule(state: CollectionState, world=world):
-                    if state.stale[self.player]:
-                        state.stale[world.player]
-                    #print(f"Lock Rule Called for {world.player}, value {state.has(f"Unlock_{world.player}",self.player)}")
-                    return state.has(f"Unlock {world.player_name}",self.player)
-                region.connect(currentOrigin,None,rule)
-                self.multiworld.regions.append(region)
-                world.options.progression_balancing.value = 0
         self.region = Region("Menu",self.player,self.multiworld)
         for world in self.multiworld.worlds.values():
             if world.player_name in slots_to_lock:
@@ -156,6 +142,33 @@ class SlotLockWorld(AutoWorld.World):
         pass
     def get_filler_item_name(self) -> str:
         return "A Cool Filler Item (No Satisfaction Guaranteed)"
+    def pre_fill(self):
+        for world in self.multiworld.worlds.values():
+            if world.player_name in self.slots_to_lock:
+                currentOriginName = world.origin_region_name
+                currentOrigin: Region
+                currentOrigin = world.get_region(currentOriginName)
+                #region = Region(f"Lock {self.player}", world.player, self.multiworld)
+                #region.connect(currentOrigin,None,rule)
+                #self.multiworld.regions.append(region)
+                for exit in currentOrigin.get_exits():
+                    old_rule = exit.access_rule
+                    def rule(state: CollectionState, world=world, old_rule=old_rule):
+                        if state.stale[self.player]:
+                            state.stale[world.player]
+                        #print(f"Lock Rule Called for {world.player}, value {state.has(f"Unlock_{world.player}",self.player)}")
+                        return state.has(f"Unlock {world.player_name}",self.player) and old_rule(state)
+                    exit.access_rule = rule
+                for location in currentOrigin.get_locations():
+                    old_rule = location.access_rule
+                    def rule(state: CollectionState, world=world, old_rule=old_rule):
+                        if state.stale[self.player]:
+                            state.stale[world.player]
+                        #print(f"Lock Rule Called for {world.player}, value {state.has(f"Unlock_{world.player}",self.player)}")
+                        return state.has(f"Unlock {world.player_name}",self.player) and old_rule(state)
+                    location.access_rule = rule
+
+                world.options.progression_balancing.value = 0
 
     def set_rules(self) -> None:
         self.multiworld.completion_condition[self.player] = lambda state: state.has_all([f"Unlock {i}" for i in self.multiworld.player_name.values()] + [f"Unlock Bonus Slot {i+1}" for i in range(self.options.bonus_item_slots.value)], self.player)
