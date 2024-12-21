@@ -79,6 +79,7 @@ def launch(*args):
 
     # handle if text client is launched using the "archipelago://name:pass@host:port" url from webhost
     if args.url:
+        import urllib
         url = urllib.parse.urlparse(args.url)
         if url.scheme == "archipelago":
             args.connect = url.netloc

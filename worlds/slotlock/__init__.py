@@ -11,7 +11,7 @@ def launch_client(*args):
     from .Client import launch
     launch_subprocess(launch, name="SlotLockClient", args=args)
 components.append(Component("Slot Lock Client", "SlotLockClient", func=launch_client,
-                            component_type=Type.CLIENT))
+                            component_type=Type.CLIENT, supports_uri=True, game_name="SlotLock"))
 
 class LockItem(Item):
     coin_suffix = ""
