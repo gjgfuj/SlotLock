@@ -73,6 +73,7 @@ class SlotLockWorld(AutoWorld.World):
     location_name_to_id = {f"Lock_{num}": num + 10000 for num in range(50000)}
     
     item_name_to_id = {f"Unlock_{num}": num + 10000 for num in range(50000)}
+    slots_to_lock = []
     for i in range(1000):
             item_name_to_id[f"Unlock Bonus Slot {i+1}"] = i
             for j in range(10):
