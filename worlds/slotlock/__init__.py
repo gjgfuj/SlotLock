@@ -106,7 +106,7 @@ class SlotLockWorld(AutoWorld.World):
 
         #print(self.location_name_to_id)
         if self.options.slots_whitelist.value:
-            slots_to_lock = [slot for slot in self.options.slots_to_lock.value if slot in map(self.multiworld.worlds.values(), lambda w: w.player_name)]
+            slots_to_lock = [slot for slot in self.options.slots_to_lock.value if any(slot == world.player_name for world in self.multiworld.worlds.values())]
         else:
             slots_to_lock = [slot.player_name for slot in self.multiworld.worlds.values() if slot.player_name not in self.options.slots_to_lock.value and slot.player_name != self.player_name]
         if self.options.random_unlocked_slots.value > len(slots_to_lock):
