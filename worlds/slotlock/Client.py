@@ -52,11 +52,7 @@ class SlotLockContext(CommonContext):
                         if not any(item.item == hint["location"]//10 for item in self.items_received) and hinted_count[hint["location"]//10] < loc_count[hint["location"]//10]:
                             if self.hint_points >= real_hint_cost and self.auto_hint_locked_items:
                                 await self.send_msgs([{"cmd": "Say", "text": f"!hint {self.item_names.lookup_in_game(hint["location"]//10, "SlotLock")}"}])
-                                await asyncio.sleep(1)
-                                self.checking_hints = False
-                                return
-            print("Hinted_count: " + str(hinted_count))
-            print("loc_count: " + str(loc_count))
+                                break
         await asyncio.sleep(1)
         self.checking_hints = False
     def update_auto_locations(self):
@@ -66,7 +62,6 @@ class SlotLockContext(CommonContext):
             else:
                 #print(f"Don't yet have {self.location_names.lookup_in_game(location,"SlotLock")}, required item {self.item_names.lookup_in_game(location // 10)}")
                 pass
-        asyncio.create_task(self.check_hints())
 
 
     def on_package(self, cmd: str, args: dict):
