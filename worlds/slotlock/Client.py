@@ -1,6 +1,10 @@
 from . import SlotLockWorld
 from CommonClient import ClientCommandProcessor, CommonContext, logger, server_loop, gui_enabled, get_base_parser
 from NetUtils import ClientStatus
+try:
+    from NetUtils import HintStatus
+except ImportError:
+    pass
 import asyncio
 class SlotLockContext(CommonContext):
 
@@ -9,6 +13,7 @@ class SlotLockContext(CommonContext):
     game = "SlotLock"  # empty matches any game since 0.3.2
     items_handling = 0b111  # receive all items for /received
     want_slot_data = True
+    checking_hints = False
     def __init__(self, server_address=None, password=None):
         CommonContext.__init__(self, server_address, password)
     async def server_auth(self, password_requested: bool = False):
@@ -16,19 +21,63 @@ class SlotLockContext(CommonContext):
             await super(TextContext, self).server_auth(password_requested)
         await self.get_username()
         await self.send_connect()
+    async def check_hints(self):
+        while self.checking_hints:
+            await asyncio.sleep(1)
+        self.checking_hints = True
+        if f"_read_hints_{self.team}_{self.slot}" in self.stored_data:
+            hintdata = self.stored_data[f"_read_hints_{self.team}_{self.slot}"]
+            hinted_count = {}
+            loc_count = {}
+            real_hint_cost = max(1, int(self.hint_cost * 0.01 * self.total_locations))
+            for location in self.server_locations:
+                if location // 10 in loc_count:
+                    loc_count[location // 10] += 1
+                else:
+                    loc_count[location // 10] = 1
+            for hint in hintdata:
+                if self.slot_concerns_self(hint["receiving_player"]):
+                    if hint["item"] not in hinted_count:
+                        hinted_count[hint["item"]] = 1
+                    else:
+                        hinted_count[hint["item"]] += 1
+                    if any(item.item == hint["item"] for item in self.items_received):
+                        if hasattr(self, "update_hint"):
+                            self.update_hint(hint["location"],hint["finding_player"], HintStatus.HINT_NO_PRIORITY)
+            for hint in hintdata:
+                if self.slot_concerns_self(hint["finding_player"]):
+                    if hint["location"]//10 not in hinted_count:
+                        hinted_count[hint["location"]// 10] = 0
+                    if (not "status" in hint) or hint["status"] == HintStatus.HINT_PRIORITY:
+                        if not any(item.item == hint["location"]//10 for item in self.items_received) and hinted_count[hint["location"]//10] < loc_count[hint["location"]//10]:
+                            if self.hint_points >= real_hint_cost and self.auto_hint_locked_items:
+                                await self.send_msgs([{"cmd": "Say", "text": f"!hint {self.item_names.lookup_in_game(hint["location"]//10, "SlotLock")}"}])
+                                await asyncio.sleep(1)
+                                self.checking_hints = False
+                                return
+            print("Hinted_count: " + str(hinted_count))
+            print("loc_count: " + str(loc_count))
+        await asyncio.sleep(1)
+        self.checking_hints = False
     def update_auto_locations(self):
         for location in self.missing_locations:
             if any(item.item == location // 10 for item in self.items_received) or (location >= 10000 and self.free_starting_items):
                 self.locations_checked.add(location)
             else:
-                print(f"Don't yet have {self.location_names.lookup_in_game(location,"SlotLock")}, required item {self.item_names.lookup_in_game(location // 10)}")
+                #print(f"Don't yet have {self.location_names.lookup_in_game(location,"SlotLock")}, required item {self.item_names.lookup_in_game(location // 10)}")
+                pass
+        asyncio.create_task(self.check_hints())
+
 
     def on_package(self, cmd: str, args: dict):
-        print(f"on_package: {cmd}, {args}")
+        asyncio.create_task(self.check_hints())
         if cmd == "Connected":
             self.game = self.slot_info[self.slot].game
-            print(args["slot_data"])
             self.free_starting_items = args["slot_data"]["free_starting_items"]
+            try:
+                self.auto_hint_locked_items = args["slot_data"]["auto_hint_locked_items"]
+            except KeyError:
+                self.auto_hint_locked_items = True
         if cmd == "ReceivedItems" or cmd == "Connected" or cmd == "RoomUpdate":
             self.update_auto_locations()
             asyncio.create_task(self.send_msgs([{"cmd": "LocationChecks",
@@ -36,7 +85,6 @@ class SlotLockContext(CommonContext):
             victory = True
             if len(self.missing_locations) > 0:
                 victory = False
-                print("Still locations left.")
             else:
                 for i, name in enumerate(self.player_names):
                     success = False
@@ -45,7 +93,6 @@ class SlotLockContext(CommonContext):
                         if i == 0 or item.item == i:
                             success = True
                     if not success:
-                        print(f"No victory without {self.player_names[i]}")
                         victory = False
             if victory:
                 print("Victory!")
@@ -55,6 +102,9 @@ class SlotLockContext(CommonContext):
     async def disconnect(self, allow_autoreconnect: bool = False):
         await super().disconnect(allow_autoreconnect)
         self.finished_game = False
+        self.free_starting_items = False
+        self.auto_hint_locked_items = False
+        self.update_auto_locations()
 
 def launch(*args):
 

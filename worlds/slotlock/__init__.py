@@ -55,6 +55,9 @@ class RandomUnlockedSlots(Range):
     default = 0
     range_start = 0
     range_end = 100
+class AutoHintLockedItems(Toggle):
+    """Whether the slotlock client should automatically ask for a hint (as long as it has enough hint points) when one of its items are hinted. Does not include items in locked worlds, only locations belonging to slotlock itself."""
+    default = 0
 
 
 @dataclass
@@ -66,6 +69,7 @@ class SlotLockOptions(PerGameCommonOptions):
     bonus_item_dupes: BonusItemDupes
     free_starting_items: FreeStartingItems
     random_unlocked_slots: RandomUnlockedSlots
+    auto_hint_locked_items: AutoHintLockedItems
 
 
 class SlotLockWorld(AutoWorld.World):
@@ -186,7 +190,8 @@ class SlotLockWorld(AutoWorld.World):
                     self.get_location(f"Free Item {slot} {i+1}").access_rule = rule
     def fill_slot_data(self):
         return {
-            "free_starting_items": self.options.free_starting_items.value
+            "free_starting_items": self.options.free_starting_items.value,
+            "auto_hint_locked_items": self.options.auto_hint_locked_items.value
         }
     def post_fill(self) -> None:
         pass
