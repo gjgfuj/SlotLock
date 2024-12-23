@@ -9,6 +9,10 @@ from worlds.LauncherComponents import Component, components, icon_paths, launch_
 
 def launch_client(*args):
     from .Client import launch
+    from CommonClient import gui_enabled
+    if not gui_enabled:
+        print(args)
+        launch(args)
     launch_subprocess(launch, name="SlotLockClient", args=args)
 components.append(Component("Slot Lock Client", "SlotLockClient", func=launch_client,
                             component_type=Type.CLIENT, supports_uri=True, game_name="SlotLock"))
@@ -168,7 +172,8 @@ class SlotLockWorld(AutoWorld.World):
                         #print(f"Lock Rule Called for {world.player}, value {state.has(f"Unlock_{world.player}",self.player)}")
                         return state.has(f"Unlock {world.player_name}",self.player) and old_rule(state)
                     location.access_rule = rule
-
+                self.multiworld.early_items[world.player] = {}
+                self.multiworld.local_early_items[world.player] = {}
                 world.options.progression_balancing.value = 0
 
     def set_rules(self) -> None:
