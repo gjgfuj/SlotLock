@@ -199,10 +199,11 @@ class SlotLockWorld(AutoWorld.World):
     def post_fill(self) -> None:
         pass
     def modify_multidata(self, multidata: Dict[str, Any]):
-        def hintfn(hint: Hint) -> Hint:
-            if hasattr(hint, "status") and self.multiworld.player_name[hint.receiving_player] in self.slots_to_lock:
-                from NetUtils import HintStatus
-                hint = hint.re_prioritize(None, HintStatus.HINT_UNSPECIFIED)
-            return hint
-        for player in self.multiworld.player_ids:
-            multidata["precollected_hints"][player] = set(map(hintfn, multidata["precollected_hints"][player]))
+        pass
+        #def hintfn(hint: Hint) -> Hint:
+        #    if hasattr(hint, "status") and self.multiworld.player_name[hint.receiving_player] in self.slots_to_lock:
+        #        from NetUtils import HintStatus
+        #        hint = hint.re_prioritize(None, HintStatus.HINT_UNSPECIFIED)
+        #    return hint
+        #for player in self.multiworld.player_ids:
+        #    multidata["precollected_hints"][player] = set(map(hintfn, multidata["precollected_hints"][player]))
