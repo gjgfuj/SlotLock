@@ -49,7 +49,7 @@ class SlotLockContext(CommonContext):
                     if hint["location"]//10 not in hinted_count:
                         hinted_count[hint["location"]// 10] = 0
                     if (not "status" in hint) or hint["status"] == HintStatus.HINT_PRIORITY:
-                        if not any(item.item == hint["location"]//10 for item in self.items_received) and hinted_count[hint["location"]//10] < loc_count[hint["location"]//10]:
+                        if not any(item.item == hint["location"]//10 for item in self.items_received) and not hint["found"] and hinted_count[hint["location"]//10] < loc_count[hint["location"]//10]:
                             if self.hint_points >= real_hint_cost and self.auto_hint_locked_items:
                                 await self.send_msgs([{"cmd": "Say", "text": f"!hint {self.item_names.lookup_in_game(hint["location"]//10, "SlotLock")}"}])
                                 break
@@ -85,7 +85,7 @@ class SlotLockContext(CommonContext):
                     success = False
                     for item in self.items_received:
                         print(item)
-                        if i == 0 or item.item == i:
+                        if i == 0 or item.item == i + 1000:
                             success = True
                     if not success:
                         victory = False

@@ -6,6 +6,7 @@ import worlds
 from worlds import AutoWorld
 from worlds.generic import GenericWorld
 from worlds.LauncherComponents import Component, components, icon_paths, launch_subprocess, Type
+from NetUtils import Hint
 
 def launch_client(*args):
     from .Client import launch
@@ -87,7 +88,7 @@ class SlotLockWorld(AutoWorld.World):
             for j in range(10):
                 location_name_to_id[f"Bonus Slot {i+1}{" " + str(j+1) if j > 0 else ""}"] = i*10 + j
     @classmethod
-    def stage_generate_early(cls, multiworld: "MultiWorld"): # type: ignore
+    def stage_generate_early(cls, multiworld: "MultiWorld"):
         item_name_to_id = {}
         location_name_to_id = {}
         for id, world in multiworld.worlds.items():
@@ -151,34 +152,36 @@ class SlotLockWorld(AutoWorld.World):
         pass
     def get_filler_item_name(self) -> str:
         return "A Cool Filler Item (No Satisfaction Guaranteed)"
-    def pre_fill(self):
-        for world in self.multiworld.worlds.values():
-            if world.player_name in self.slots_to_lock:
-                currentOriginName = world.origin_region_name
-                currentOrigin: Region
-                currentOrigin = world.get_region(currentOriginName)
-                #region = Region(f"Lock {self.player}", world.player, self.multiworld)
-                #region.connect(currentOrigin,None,rule)
-                #self.multiworld.regions.append(region)
-                for exit in currentOrigin.get_exits():
-                    old_rule = exit.access_rule
-                    def rule(state: CollectionState, world=world, old_rule=old_rule):
-                        if state.stale[self.player]:
-                            state.stale[world.player]
-                        #print(f"Lock Rule Called for {world.player}, value {state.has(f"Unlock_{world.player}",self.player)}")
-                        return state.has(f"Unlock {world.player_name}",self.player) and old_rule(state)
-                    exit.access_rule = rule
-                for location in currentOrigin.get_locations():
-                    old_rule = location.access_rule
-                    def rule(state: CollectionState, world=world, old_rule=old_rule):
-                        if state.stale[self.player]:
-                            state.stale[world.player]
-                        #print(f"Lock Rule Called for {world.player}, value {state.has(f"Unlock_{world.player}",self.player)}")
-                        return state.has(f"Unlock {world.player_name}",self.player) and old_rule(state)
-                    location.access_rule = rule
-                self.multiworld.early_items[world.player] = {}
-                self.multiworld.local_early_items[world.player] = {}
-                world.options.progression_balancing.value = 0
+    @classmethod
+    def stage_pre_fill(cls, multiworld):
+        for self in multiworld.get_game_worlds(cls.game): #workaround this being a classmethod lol
+            for world in multiworld.worlds.values():
+                if world.player_name in self.slots_to_lock:
+                    currentOriginName = world.origin_region_name
+                    currentOrigin: Region
+                    currentOrigin = world.get_region(currentOriginName)
+                    #region = Region(f"Lock {self.player}", world.player, self.multiworld)
+                    #region.connect(currentOrigin,None,rule)
+                    #self.multiworld.regions.append(region)
+                    for exit in currentOrigin.get_exits():
+                        old_rule = exit.access_rule
+                        def rule(state: CollectionState, world=world, old_rule=old_rule):
+                            if state.stale[self.player]:
+                                state.stale[world.player]
+                            #print(f"Lock Rule Called for {world.player}, value {state.has(f"Unlock_{world.player}",self.player)}")
+                            return state.has(f"Unlock {world.player_name}",self.player) and old_rule(state)
+                        exit.access_rule = rule
+                    for location in currentOrigin.get_locations():
+                        old_rule = location.access_rule
+                        def rule(state: CollectionState, world=world, old_rule=old_rule):
+                            if state.stale[self.player]:
+                                state.stale[world.player]
+                            #print(f"Lock Rule Called for {world.player}, value {state.has(f"Unlock_{world.player}",self.player)}")
+                            return state.has(f"Unlock {world.player_name}",self.player) and old_rule(state)
+                        location.access_rule = rule
+                    multiworld.early_items[world.player] = {}
+                    multiworld.local_early_items[world.player] = {}
+                    world.options.progression_balancing.value = 0
 
     def set_rules(self) -> None:
         self.multiworld.completion_condition[self.player] = lambda state: state.has_all([f"Unlock {i}" for i in self.multiworld.player_name.values()] + [f"Unlock Bonus Slot {i+1}" for i in range(self.options.bonus_item_slots.value)], self.player)
@@ -195,4 +198,11 @@ class SlotLockWorld(AutoWorld.World):
         }
     def post_fill(self) -> None:
         pass
-
+    def modify_multidata(self, multidata: Dict[str, Any]):
+        def hintfn(hint: Hint) -> Hint:
+            if hasattr(hint, "status") and self.multiworld.player_name[hint.receiving_player] in self.slots_to_lock:
+                from NetUtils import HintStatus
+                hint = hint.re_prioritize(None, HintStatus.HINT_UNSPECIFIED)
+            return hint
+        for player in self.multiworld.player_ids:
+            multidata["precollected_hints"][player] = set(map(hintfn, multidata["precollected_hints"][player]))
