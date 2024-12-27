@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Dict
 from BaseClasses import CollectionState, Item, ItemClassification, Location, MultiWorld, Region
-from Options import OptionSet, PerGameCommonOptions, Range, StartInventoryPool, Toggle
+from Options import OptionSet, PerGameCommonOptions, Range, StartInventoryPool, Toggle, Choice
 import worlds
 from worlds import AutoWorld
 from worlds.generic import GenericWorld
@@ -60,7 +60,6 @@ class AutoHintLockedItems(Toggle):
     """Whether the slotlock client should automatically ask for a hint (as long as it has enough hint points) when one of its items are hinted. Does not include items in locked worlds, only locations belonging to slotlock itself."""
     default = 0
 
-
 @dataclass
 class SlotLockOptions(PerGameCommonOptions):
     slots_to_lock: SlotsToLock
@@ -79,29 +78,52 @@ class SlotLockWorld(AutoWorld.World):
     game = "SlotLock"
     options: SlotLockOptions
     options_dataclass = SlotLockOptions
-    location_name_to_id = {f"Lock_{num}": num + 10000 for num in range(50000)}
-    
-    item_name_to_id = {f"Unlock_{num}": num + 10000 for num in range(50000)}
-    slots_to_lock = []
+    location_name_to_id = {f"Lock_{num+1}": num+10000 for num in range(50000)}
+    item_name_to_id = {f"Unlock_{num+1}": num+1000 for num in range(5000)}
     for i in range(1000):
-            item_name_to_id[f"Unlock Bonus Slot {i+1}"] = i
-            for j in range(10):
-                location_name_to_id[f"Bonus Slot {i+1}{" " + str(j+1) if j > 0 else ""}"] = i*10 + j
+        item_name_to_id[f"Unlock Bonus Slot {i+1}"] = i + 1
+        for j in range(10):
+            location_name_to_id[f"Bonus Slot {i+1}{" " + str(j+1) if j > 0 else ""}"] = i*10 + j
+    item_name_groups = {"Unlock Slots": set(f"Unlock_{num+1}" for num in range(5000)), "Unlock Bonus Slots": set(f"Unlock Bonus Slot {num+1}" for num in range(1000))}
+    location_name_groups = {"Slot Rewards": set(f"Lock_{num+1}" for num in range(50000)), "Bonus Slot Rewards": set([f"Unlock Bonus Slot {num+1}" for num in range(1000)])}
+    slots_to_lock = []
+    def __init__(self, multiworld, player):
+        super().__init__(multiworld, player)
+    def create_item(self, name: str):
+        if "Unlock_" in name:
+            return self.create_slotlock_item(self.multiworld.player_name[int(name.split("_")[1])])
+        elif "Unlock Bonus Slot" in name:
+            return self.create_bonus_key(int(name.split("Slot ")[1]))
+        elif "Unlock " in name:
+            return self.create_slotlock_item(name.split("lock ")[1])
+        elif name == "Nothing":
+            return Item(name,ItemClassification.filler,6001)
+        raise Exception("Invalid item name")
     @classmethod
     def stage_generate_early(cls, multiworld: "MultiWorld"):
         item_name_to_id = {}
         location_name_to_id = {}
+        world_unlock_items = set()
+        world_unlock_locations = set()
+        bonus_locations = set()
+        bonus_items = set()
         for id, world in multiworld.worlds.items():
             item_name_to_id[f"Unlock {world.player_name}"] = id + 1000
+            world_unlock_items.add(f"Unlock {world.player_name}")
             for i in range(10):
                 location_name_to_id[f"Free Item {world.player_name} {i+1}"] = id*10 + i + 10000
-        id = max(multiworld.worlds.keys())
+                world_unlock_locations.add(f"Free Item {world.player_name} {i+1}")
+        item_name_to_id["Nothing"] = 6001
         for i in range(1000):
-            item_name_to_id[f"Unlock Bonus Slot {i+1}"] = i
+            item_name_to_id[f"Unlock Bonus Slot {i+1}"] = i + 1
+            bonus_items.add(f"Unlock Bonus Slot {i+1}")
             for j in range(10):
                 location_name_to_id[f"Bonus Slot {i+1}{" " + str(j+1) if j > 0 else ""}"] = i*10 + j
+                bonus_locations.add(f"Bonus Slot {i+1}{" " + str(j+1) if j > 0 else ""}")
         cls.item_name_to_id = item_name_to_id
         cls.location_name_to_id = location_name_to_id
+        cls.item_name_groups = {"Everything": set(world_unlock_items.union(bonus_items).union(set("Nothing"))), "Slot Unlocks": world_unlock_items, "Bonus Slot Unlocks": bonus_items}
+        cls.location_name_groups = {"Everywhere": set(world_unlock_locations.union(bonus_locations)), "Slot Rewards": world_unlock_locations, "Bonus Slot Rewards": bonus_locations}
 
         # update datapackage checksum
         worlds.network_data_package["games"][cls.game] = cls.get_data_package_data()
@@ -132,6 +154,23 @@ class SlotLockWorld(AutoWorld.World):
                 for i in range(self.options.number_of_unlocks.value):
                     self.region.add_locations({f"Free Item {world.player_name} {i+1}": self.location_name_to_id[f"Free Item {world.player_name} {i+1}"]}, LockLocation)
                     self.multiworld.itempool.append(self.create_slotlock_item(world.player_name))
+                    def add_slot_item_to_option(option, slot, world=world):
+                        if isinstance(option.value,dict) and (f"Unlock_{world.player}" in option.value.keys()):
+                            option.value[f"Unlock {slot}"] = self.options.number_of_unlocks.value
+                        elif (isinstance(option.value,list) or isinstance(option.value,set)) and (f"Unlock_{world.player}" in option.value):
+                            option.value.add(f"Unlock {slot}")
+                    def add_slot_location_to_option(option, slot, world=world):
+                        if isinstance(option.value,dict) and (f"Lock_{world.player}" in option.value.keys()):
+                            option.value[f"Free Item {slot} {i+1}"] = self.options.number_of_unlocks.value
+                        elif (isinstance(option.value,list) or isinstance(option.value, set)) and (f"Lock_{world.player}" in option.value):
+                            option.value.add(f"Free Item {slot} {i+1}")
+                    add_slot_location_to_option(self.options.exclude_locations, world.player_name)
+                    add_slot_location_to_option(self.options.priority_locations, world.player_name)
+                    add_slot_location_to_option(self.options.start_location_hints, world.player_name)
+                    add_slot_item_to_option(self.options.local_items, world.player_name)
+                    add_slot_item_to_option(self.options.non_local_items, world.player_name)
+                    add_slot_item_to_option(self.options.start_hints, world.player_name)
+                    add_slot_item_to_option(self.options.start_inventory, world.player_name)
             else:
                 self.multiworld.push_precollected(self.create_slotlock_item(world.player_name))
         self.multiworld.regions.append(self.region)
@@ -146,12 +185,10 @@ class SlotLockWorld(AutoWorld.World):
                 return state.has(f"Unlock Bonus Slot {bonusSlot+1}", self.player)
             self.region.connect(bonusSlotRegion,None, rule)
 
-        
-
     def create_regions(self) -> None:
         pass
     def get_filler_item_name(self) -> str:
-        return "A Cool Filler Item (No Satisfaction Guaranteed)"
+        return "Nothing"
     @classmethod
     def stage_pre_fill(cls, multiworld):
         for self in multiworld.get_game_worlds(cls.game): #workaround this being a classmethod lol
