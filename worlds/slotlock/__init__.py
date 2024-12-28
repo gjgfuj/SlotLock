@@ -80,6 +80,7 @@ class SlotLockWorld(AutoWorld.World):
     options_dataclass = SlotLockOptions
     location_name_to_id = {f"Lock_{num+1}": num+10010 for num in range(50000)}
     item_name_to_id = {f"Unlock_{num+1}": num+1001 for num in range(5000)}
+    item_name_to_id["Nothing"] = 6999
     for i in range(1000):
         item_name_to_id[f"Unlock Bonus Slot {i+1}"] = i + 1
         for j in range(10):
@@ -97,7 +98,7 @@ class SlotLockWorld(AutoWorld.World):
         elif "Unlock " in name:
             return self.create_slotlock_item(name.split("lock ")[1])
         elif name == "Nothing":
-            return Item(name,ItemClassification.filler,6001)
+            return Item(name,ItemClassification.filler,6999)
         raise Exception("Invalid item name")
     @classmethod
     def stage_generate_early(cls, multiworld: "MultiWorld"):
@@ -108,12 +109,12 @@ class SlotLockWorld(AutoWorld.World):
         bonus_locations = set()
         bonus_items = set()
         for id, world in multiworld.worlds.items():
-            item_name_to_id[f"Unlock {world.player_name}"] = id + 10001
+            item_name_to_id[f"Unlock {world.player_name}"] = id + 1001
             world_unlock_items.add(f"Unlock {world.player_name}")
             for i in range(10):
                 location_name_to_id[f"Free Item {world.player_name} {i+1}"] = id*10 + i + 10010
                 world_unlock_locations.add(f"Free Item {world.player_name} {i+1}")
-        item_name_to_id["Nothing"] = 6001
+        item_name_to_id["Nothing"] = 6999
         for i in range(1000):
             item_name_to_id[f"Unlock Bonus Slot {i+1}"] = i + 1
             bonus_items.add(f"Unlock Bonus Slot {i+1}")
