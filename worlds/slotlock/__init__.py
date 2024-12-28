@@ -21,7 +21,7 @@ components.append(Component("Slot Lock Client", "SlotLockClient", func=launch_cl
 class LockItem(Item):
     coin_suffix = ""
     def __init__(self, world: "SlotLockWorld", player: int):
-        Item.__init__(self,f"Unlock {world.multiworld.worlds[player].player_name}",ItemClassification.progression,player+1000,world.player)
+        Item.__init__(self,f"Unlock {world.multiworld.worlds[player].player_name}",ItemClassification.progression,player+1001,world.player)
 class LockLocation(Location):
     pass
 
@@ -33,6 +33,11 @@ class NumberOfUnlocks(Range):
     default = 1
     range_start = 1
     range_end = 10
+class UnlockItemFiller(Range):
+    """Gives extra item slots for slot unlock locations that contain filler."""
+    default = 0
+    range_start = 0
+    range_end = 9
 class SlotsToLockWhitelistOption(Toggle):
     """If the list of slots to lock should be treated as a blacklist rather than a whitelist. If true, will lock every slot listed. If false, will lock every slot except this one and any slot listed."""
     default = 1
@@ -51,6 +56,11 @@ class BonusItemDupes(Range):
     default = 1
     range_start = 1
     range_end = 10
+class BonusItemFiller(Range):
+    """Number of bonus items per item slot that are filled with filler. Total locations = bonus_item_dupes + bonus_item_filler, but are capped to 10, with dupes taking priority"""
+    default = 0
+    range_start = 0
+    range_end = 9
 class RandomUnlockedSlots(Range):
     """Number of slots to randomly start with, from the slots that are locked."""
     default = 0
@@ -65,8 +75,10 @@ class SlotLockOptions(PerGameCommonOptions):
     slots_to_lock: SlotsToLock
     slots_whitelist: SlotsToLockWhitelistOption
     number_of_unlocks: NumberOfUnlocks
+    unlock_item_filler: UnlockItemFiller
     bonus_item_slots: BonusItemSlots
     bonus_item_dupes: BonusItemDupes
+    bonus_item_filler: BonusItemFiller
     free_starting_items: FreeStartingItems
     random_unlocked_slots: RandomUnlockedSlots
     auto_hint_locked_items: AutoHintLockedItems
@@ -84,7 +96,7 @@ class SlotLockWorld(AutoWorld.World):
     for i in range(1000):
         item_name_to_id[f"Unlock Bonus Slot {i+1}"] = i + 1
         for j in range(10):
-            location_name_to_id[f"Bonus Slot {i+1}{" " + str(j+1) if j > 0 else ""}"] = i*10 + j + 1
+            location_name_to_id[f"Bonus Slot {i+1}{" " + str(j+1) if j > 0 else ""}"] = i*10 + j + 10
     item_name_groups = {"Unlock Slots": set(f"Unlock_{num+1}" for num in range(5000)), "Unlock Bonus Slots": set(f"Unlock Bonus Slot {num+1}" for num in range(1000))}
     location_name_groups = {"Slot Rewards": set(f"Lock_{num+1}" for num in range(50000)), "Bonus Slot Rewards": set([f"Bonus Slot {(num+10)//10}{" " + str((num % 10)+1) if (num % 10) > 0 else ""}" for num in range(1000)])}
     slots_to_lock = []
@@ -98,7 +110,7 @@ class SlotLockWorld(AutoWorld.World):
         elif "Unlock " in name:
             return self.create_slotlock_item(name.split("lock ")[1])
         elif name == "Nothing":
-            return Item(name,ItemClassification.filler,6999)
+            return Item(name,ItemClassification.filler,6999, self.player)
         raise Exception("Invalid item name")
     @classmethod
     def stage_generate_early(cls, multiworld: "MultiWorld"):
@@ -131,7 +143,7 @@ class SlotLockWorld(AutoWorld.World):
     def create_slotlock_item(self, slotName: str) -> LockItem:
         return LockItem(self,self.multiworld.world_name_lookup[slotName])
     def create_bonus_key(self, bonusSlot: int) -> Item:
-        return Item(f"Unlock Bonus Slot {bonusSlot+1}", ItemClassification.progression,bonusSlot,self.player)
+        return Item(f"Unlock Bonus Slot {bonusSlot+1}", ItemClassification.progression,bonusSlot+1,self.player)
     def create_items(self) -> None:
         if hasattr(self.multiworld, "generation_is_fake"):
             # UT has no way to get the unlock items so just skip locking altogether
@@ -150,35 +162,43 @@ class SlotLockWorld(AutoWorld.World):
         self.slots_to_lock = slots_to_lock
         #(creating regions in create_items to run always after create_regions for everything else.)
         self.region = Region("Menu",self.player,self.multiworld)
+        def add_slot_item_to_option(option, world):
+            slot = world.player_name
+            if isinstance(option.value,dict) and (f"Unlock_{world.player}" in option.value.keys()):
+                option.value[f"Unlock {slot}"] = self.options.number_of_unlocks.value
+            elif (isinstance(option.value,list) or isinstance(option.value,set)) and (f"Unlock_{world.player}" in option.value):
+                option.value.add(f"Unlock {slot}")
+        def add_slot_location_to_option(option, world):
+            slot = world.player_name
+            if isinstance(option.value,dict) and (f"Lock_{world.player}" in option.value.keys()):
+                option.value[f"Free Item {slot} {i+1}"] = self.options.number_of_unlocks.value
+            elif (isinstance(option.value,list) or isinstance(option.value, set)) and (f"Lock_{world.player}" in option.value):
+                option.value.add(f"Free Item {slot} {i+1}")
         for world in self.multiworld.worlds.values():
             if world.player_name in slots_to_lock:
-                for i in range(self.options.number_of_unlocks.value):
+                for i in range(min(10, self.options.number_of_unlocks.value + self.options.unlock_item_filler.value)):
                     self.region.add_locations({f"Free Item {world.player_name} {i+1}": self.location_name_to_id[f"Free Item {world.player_name} {i+1}"]}, LockLocation)
-                    self.multiworld.itempool.append(self.create_slotlock_item(world.player_name))
-                    def add_slot_item_to_option(option, slot, world=world):
-                        if isinstance(option.value,dict) and (f"Unlock_{world.player}" in option.value.keys()):
-                            option.value[f"Unlock {slot}"] = self.options.number_of_unlocks.value
-                        elif (isinstance(option.value,list) or isinstance(option.value,set)) and (f"Unlock_{world.player}" in option.value):
-                            option.value.add(f"Unlock {slot}")
-                    def add_slot_location_to_option(option, slot, world=world):
-                        if isinstance(option.value,dict) and (f"Lock_{world.player}" in option.value.keys()):
-                            option.value[f"Free Item {slot} {i+1}"] = self.options.number_of_unlocks.value
-                        elif (isinstance(option.value,list) or isinstance(option.value, set)) and (f"Lock_{world.player}" in option.value):
-                            option.value.add(f"Free Item {slot} {i+1}")
-                    add_slot_location_to_option(self.options.exclude_locations, world.player_name)
-                    add_slot_location_to_option(self.options.priority_locations, world.player_name)
-                    add_slot_location_to_option(self.options.start_location_hints, world.player_name)
-                    add_slot_item_to_option(self.options.local_items, world.player_name)
-                    add_slot_item_to_option(self.options.non_local_items, world.player_name)
-                    add_slot_item_to_option(self.options.start_hints, world.player_name)
-                    add_slot_item_to_option(self.options.start_inventory, world.player_name)
+                    if i <= self.options.number_of_unlocks.value:
+                        self.multiworld.itempool.append(self.create_slotlock_item(world.player_name))
+                    else:
+                        self.multiworld.itempool.append(self.create_item("Nothing"))
+                    add_slot_location_to_option(self.options.exclude_locations, world)
+                    add_slot_location_to_option(self.options.priority_locations, world)
+                    add_slot_location_to_option(self.options.start_location_hints, world)
+                    add_slot_item_to_option(self.options.local_items, world)
+                    add_slot_item_to_option(self.options.non_local_items, world)
+                    add_slot_item_to_option(self.options.start_hints, world)
+                    add_slot_item_to_option(self.options.start_inventory, world)
             else:
                 self.multiworld.push_precollected(self.create_slotlock_item(world.player_name))
         self.multiworld.regions.append(self.region)
         for bonusSlot in range(self.options.bonus_item_slots.value):
             bonusSlotRegion = Region(f"Bonus Slot {bonusSlot+1}", self.player, self.multiworld)
-            for bonusDupes in range(self.options.bonus_item_dupes.value):
-                self.multiworld.itempool.append(self.create_bonus_key(bonusSlot))
+            for bonusDupes in range(min(self.options.bonus_item_dupes.value + self.options.bonus_item_filler.value, 10)):
+                if bonusDupes <= self.options.bonus_item_dupes.value:
+                    self.multiworld.itempool.append(self.create_bonus_key(bonusSlot))
+                else:
+                    self.multiworld.itempool.append(self.create_item("Nothing"))
                 locName = f"Bonus Slot {bonusSlot+1}{" " + str(bonusDupes+1) if bonusDupes > 0 else ""}"
                 bonusSlotRegion.add_locations({locName: self.location_name_to_id[locName]})
             self.multiworld.regions.append(bonusSlotRegion)
@@ -225,7 +245,7 @@ class SlotLockWorld(AutoWorld.World):
         self.multiworld.completion_condition[self.player] = lambda state: state.has_all([f"Unlock {i}" for i in self.multiworld.player_name.values()] + [f"Unlock Bonus Slot {i+1}" for i in range(self.options.bonus_item_slots.value)], self.player)
         if not self.options.free_starting_items.value:
             for slot in self.slots_to_lock:
-                for i in range(self.options.number_of_unlocks):
+                for i in range(min(self.options.number_of_unlocks+self.options.unlock_item_filler,10)):
                     def rule(state: CollectionState, slot=slot):
                         return state.has(f"Unlock {slot}", self.player)
                     self.get_location(f"Free Item {slot} {i+1}").access_rule = rule
