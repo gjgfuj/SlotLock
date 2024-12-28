@@ -81,9 +81,9 @@ class SlotLockWorld(AutoWorld.World):
     location_name_to_id = {f"Lock_{num+1}": num+10010 for num in range(50000)}
     item_name_to_id = {f"Unlock_{num+1}": num+1001 for num in range(5000)}
     for i in range(1000):
-        item_name_to_id[f"Unlock Bonus Slot {i+1}"] = i
+        item_name_to_id[f"Unlock Bonus Slot {i+1}"] = i + 1
         for j in range(10):
-            location_name_to_id[f"Bonus Slot {i+1}{" " + str(j+1) if j > 0 else ""}"] = i*10 + j
+            location_name_to_id[f"Bonus Slot {i+1}{" " + str(j+1) if j > 0 else ""}"] = i*10 + j + 1
     item_name_groups = {"Unlock Slots": set(f"Unlock_{num+1}" for num in range(5000)), "Unlock Bonus Slots": set(f"Unlock Bonus Slot {num+1}" for num in range(1000))}
     location_name_groups = {"Slot Rewards": set(f"Lock_{num+1}" for num in range(50000)), "Bonus Slot Rewards": set([f"Unlock Bonus Slot {num+1}" for num in range(1000)])}
     slots_to_lock = []
