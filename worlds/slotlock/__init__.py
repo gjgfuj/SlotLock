@@ -78,10 +78,10 @@ class SlotLockWorld(AutoWorld.World):
     game = "SlotLock"
     options: SlotLockOptions
     options_dataclass = SlotLockOptions
-    location_name_to_id = {f"Lock_{num+1}": num+10000 for num in range(50000)}
-    item_name_to_id = {f"Unlock_{num+1}": num+1000 for num in range(5000)}
+    location_name_to_id = {f"Lock_{num+1}": num+10010 for num in range(50000)}
+    item_name_to_id = {f"Unlock_{num+1}": num+1001 for num in range(5000)}
     for i in range(1000):
-        item_name_to_id[f"Unlock Bonus Slot {i+1}"] = i + 1
+        item_name_to_id[f"Unlock Bonus Slot {i+1}"] = i
         for j in range(10):
             location_name_to_id[f"Bonus Slot {i+1}{" " + str(j+1) if j > 0 else ""}"] = i*10 + j
     item_name_groups = {"Unlock Slots": set(f"Unlock_{num+1}" for num in range(5000)), "Unlock Bonus Slots": set(f"Unlock Bonus Slot {num+1}" for num in range(1000))}
@@ -108,17 +108,17 @@ class SlotLockWorld(AutoWorld.World):
         bonus_locations = set()
         bonus_items = set()
         for id, world in multiworld.worlds.items():
-            item_name_to_id[f"Unlock {world.player_name}"] = id + 1000
+            item_name_to_id[f"Unlock {world.player_name}"] = id + 10001
             world_unlock_items.add(f"Unlock {world.player_name}")
             for i in range(10):
-                location_name_to_id[f"Free Item {world.player_name} {i+1}"] = id*10 + i + 10000
+                location_name_to_id[f"Free Item {world.player_name} {i+1}"] = id*10 + i + 10010
                 world_unlock_locations.add(f"Free Item {world.player_name} {i+1}")
         item_name_to_id["Nothing"] = 6001
         for i in range(1000):
             item_name_to_id[f"Unlock Bonus Slot {i+1}"] = i + 1
             bonus_items.add(f"Unlock Bonus Slot {i+1}")
             for j in range(10):
-                location_name_to_id[f"Bonus Slot {i+1}{" " + str(j+1) if j > 0 else ""}"] = i*10 + j
+                location_name_to_id[f"Bonus Slot {i+1}{" " + str(j+1) if j > 0 else ""}"] = i*10 + j + 10
                 bonus_locations.add(f"Bonus Slot {i+1}{" " + str(j+1) if j > 0 else ""}")
         cls.item_name_to_id = item_name_to_id
         cls.location_name_to_id = location_name_to_id
