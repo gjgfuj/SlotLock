@@ -48,14 +48,14 @@ class SlotLockContext(CommonContext):
                     else:
                         hinted_count[hint["item"]] += 1
                     if any(item.item == hint["item"] for item in self.items_received):
-                        if hasattr(self, "update_hint"):
+                        if hasattr(self, "update_hint") and hint["status"] == HintStatus.HINT_PRIORITY:
                             self.update_hint(hint["location"],hint["finding_player"], HintStatus.HINT_NO_PRIORITY)
             for hint in hintdata:
                 if self.slot_concerns_self(hint["finding_player"]):
                     if hint["location"]//10 not in hinted_count:
                         hinted_count[hint["location"]// 10] = 0
                     if (not "status" in hint) or hint["status"] == HintStatus.HINT_PRIORITY:
-                        if not any(item.item == hint["location"]//10 for item in self.items_received) and not hint["found"] and hinted_count[hint["location"]//10] < 1]:
+                        if not any(item.item == hint["location"]//10 for item in self.items_received) and not hint["found"] and hinted_count[hint["location"]//10] < 1:
                             if self.hint_points >= real_hint_cost and self.auto_hint_locked_items:
                                 await self.send_msgs([{"cmd": "Say", "text": f"!hint {self.item_names.lookup_in_game(hint["location"]//10, "SlotLock")}"}])
                                 break
@@ -107,6 +107,7 @@ class SlotLockContext(CommonContext):
         self.auto_hint_locked_items = False
         self.checked_locations = set()
         self.items_received = []
+        self.update_auto_locations()
 
 def launch(*args):
 
