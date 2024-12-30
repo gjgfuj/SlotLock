@@ -62,11 +62,12 @@ class SlotLockContext(CommonContext):
         await asyncio.sleep(1)
         self.checking_hints = False
     def update_auto_locations(self):
+        self.locations_checked = set()
         for location in self.missing_locations:
             if any(item.item == location // 10 for item in self.items_received) or (location >= 10000 and self.free_starting_items):
                 self.locations_checked.add(location)
             else:
-                #print(f"Don't yet have {self.location_names.lookup_in_game(location,"SlotLock")}, required item {self.item_names.lookup_in_game(location // 10)}")
+                logger.debug(f"Don't yet have {self.location_names.lookup_in_game(location,"SlotLock")}, required item {self.item_names.lookup_in_game(location // 10)}")
                 pass
 
 
@@ -87,13 +88,14 @@ class SlotLockContext(CommonContext):
             if len(self.missing_locations) > 0:
                 victory = False
             else:
-                for i, name in enumerate(self.player_names):
+                for i, name in self.player_names.items():
                     success = False
                     for item in self.items_received:
                         print(item)
-                        if i == 0 or item.item == i + 1000:
+                        if i == 0 or item.item == i + 1001:
                             success = True
                     if not success:
+                        print(f"No victory yet, {name} unlock required. Item ID {i + 1001}")
                         victory = False
             if victory:
                 print("Victory!")
@@ -106,6 +108,7 @@ class SlotLockContext(CommonContext):
         self.free_starting_items = False
         self.auto_hint_locked_items = False
         self.checked_locations = set()
+        self.locations_checked = set()
         self.items_received = []
         self.update_auto_locations()
 
