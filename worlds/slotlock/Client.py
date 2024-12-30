@@ -6,6 +6,10 @@ try:
 except ImportError:
     pass
 import asyncio
+class SlotLockCommandProcessor(ClientCommandProcessor):
+    def _cmd_autohint(self):
+        logger.info("Toggling Autohint")
+        self.ctx.auto_hint_locked_items = not self.ctx.auto_hint_locked_items
 class SlotLockContext(CommonContext):
 
     # Text Mode to use !hint and such with games that have no text entry
@@ -14,8 +18,10 @@ class SlotLockContext(CommonContext):
     items_handling = 0b111  # receive all items for /received
     want_slot_data = True
     checking_hints = False
+    command_processor = SlotLockCommandProcessor
     def __init__(self, server_address=None, password=None):
         CommonContext.__init__(self, server_address, password)
+
     async def server_auth(self, password_requested: bool = False):
         if password_requested and not self.password:
             await super(TextContext, self).server_auth(password_requested)
@@ -49,7 +55,7 @@ class SlotLockContext(CommonContext):
                     if hint["location"]//10 not in hinted_count:
                         hinted_count[hint["location"]// 10] = 0
                     if (not "status" in hint) or hint["status"] == HintStatus.HINT_PRIORITY:
-                        if not any(item.item == hint["location"]//10 for item in self.items_received) and not hint["found"] and hinted_count[hint["location"]//10] < loc_count[hint["location"]//10]:
+                        if not any(item.item == hint["location"]//10 for item in self.items_received) and not hint["found"] and hinted_count[hint["location"]//10] < 1]:
                             if self.hint_points >= real_hint_cost and self.auto_hint_locked_items:
                                 await self.send_msgs([{"cmd": "Say", "text": f"!hint {self.item_names.lookup_in_game(hint["location"]//10, "SlotLock")}"}])
                                 break
@@ -99,7 +105,8 @@ class SlotLockContext(CommonContext):
         self.finished_game = False
         self.free_starting_items = False
         self.auto_hint_locked_items = False
-        self.update_auto_locations()
+        self.checked_locations = set()
+        self.items_received = []
 
 def launch(*args):
 

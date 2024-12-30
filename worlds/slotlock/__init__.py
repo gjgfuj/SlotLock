@@ -178,7 +178,7 @@ class SlotLockWorld(AutoWorld.World):
             if world.player_name in slots_to_lock:
                 for i in range(min(10, self.options.number_of_unlocks.value + self.options.unlock_item_filler.value)):
                     self.region.add_locations({f"Free Item {world.player_name} {i+1}": self.location_name_to_id[f"Free Item {world.player_name} {i+1}"]}, LockLocation)
-                    if i <= self.options.number_of_unlocks.value:
+                    if i < self.options.number_of_unlocks.value:
                         self.multiworld.itempool.append(self.create_slotlock_item(world.player_name))
                     else:
                         self.multiworld.itempool.append(self.create_item("Nothing"))
@@ -195,7 +195,7 @@ class SlotLockWorld(AutoWorld.World):
         for bonusSlot in range(self.options.bonus_item_slots.value):
             bonusSlotRegion = Region(f"Bonus Slot {bonusSlot+1}", self.player, self.multiworld)
             for bonusDupes in range(min(self.options.bonus_item_dupes.value + self.options.bonus_item_filler.value, 10)):
-                if bonusDupes <= self.options.bonus_item_dupes.value:
+                if bonusDupes < self.options.bonus_item_dupes.value:
                     self.multiworld.itempool.append(self.create_bonus_key(bonusSlot))
                 else:
                     self.multiworld.itempool.append(self.create_item("Nothing"))
