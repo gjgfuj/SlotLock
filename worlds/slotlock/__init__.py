@@ -34,7 +34,7 @@ class NumberOfUnlocks(Range):
     range_start = 1
     range_end = 10
 class UnlockItemFiller(Range):
-    """Gives extra item slots for slot unlock locations that contain filler."""
+    """Number of additional locations for the world unlock slots. This amount is capped to 10, and automatically includes any copies of the bonus item key plus the additional locations here. The additional locations each add a Nothing item to the pool."""
     default = 0
     range_start = 0
     range_end = 9
@@ -52,12 +52,12 @@ class BonusItemSlots(Range):
     range_start = 0
     range_end = 1000
 class BonusItemDupes(Range):
-    """Number of bonus items *per* item slot. This will also add this many keys for said slots into the pool."""
+    """Number of copies of bonus slot unlocks."""
     default = 1
     range_start = 1
     range_end = 10
 class BonusItemFiller(Range):
-    """Number of bonus items per item slot that are filled with filler. Total locations = bonus_item_dupes + bonus_item_filler, but are capped to 10, with dupes taking priority"""
+    """Number of additional locations for the bonus item slots. This amount is capped to 10, and automatically includes any copies of the bonus item key plus the additional locations here."""
     default = 0
     range_start = 0
     range_end = 9
@@ -74,10 +74,10 @@ class AutoHintLockedItems(Toggle):
 class SlotLockOptions(PerGameCommonOptions):
     slots_to_lock: SlotsToLock
     slots_whitelist: SlotsToLockWhitelistOption
-    number_of_unlocks: NumberOfUnlocks
+    unlock_item_copies: NumberOfUnlocks
     unlock_item_filler: UnlockItemFiller
     bonus_item_slots: BonusItemSlots
-    bonus_item_dupes: BonusItemDupes
+    bonus_item_copies: BonusItemDupes
     bonus_item_filler: BonusItemFiller
     free_starting_items: FreeStartingItems
     random_unlocked_slots: RandomUnlockedSlots
@@ -165,20 +165,20 @@ class SlotLockWorld(AutoWorld.World):
         def add_slot_item_to_option(option, world):
             slot = world.player_name
             if isinstance(option.value,dict) and (f"Unlock_{world.player}" in option.value.keys()):
-                option.value[f"Unlock {slot}"] = self.options.number_of_unlocks.value
+                option.value[f"Unlock {slot}"] = self.options.unlock_item_copies.value
             elif (isinstance(option.value,list) or isinstance(option.value,set)) and (f"Unlock_{world.player}" in option.value):
                 option.value.add(f"Unlock {slot}")
         def add_slot_location_to_option(option, world):
             slot = world.player_name
             if isinstance(option.value,dict) and (f"Lock_{world.player}" in option.value.keys()):
-                option.value[f"Free Item {slot} {i+1}"] = self.options.number_of_unlocks.value
+                option.value[f"Free Item {slot} {i+1}"] = self.options.unlock_item_copies.value
             elif (isinstance(option.value,list) or isinstance(option.value, set)) and (f"Lock_{world.player}" in option.value):
                 option.value.add(f"Free Item {slot} {i+1}")
         for world in self.multiworld.worlds.values():
             if world.player_name in slots_to_lock:
-                for i in range(min(10, self.options.number_of_unlocks.value + self.options.unlock_item_filler.value)):
+                for i in range(min(10, self.options.unlock_item_copies.value + self.options.unlock_item_filler.value)):
                     self.region.add_locations({f"Free Item {world.player_name} {i+1}": self.location_name_to_id[f"Free Item {world.player_name} {i+1}"]}, LockLocation)
-                    if i < self.options.number_of_unlocks.value:
+                    if i < self.options.unlock_item_copies.value:
                         self.multiworld.itempool.append(self.create_slotlock_item(world.player_name))
                     else:
                         self.multiworld.itempool.append(self.create_item("Nothing"))
@@ -194,8 +194,8 @@ class SlotLockWorld(AutoWorld.World):
         self.multiworld.regions.append(self.region)
         for bonusSlot in range(self.options.bonus_item_slots.value):
             bonusSlotRegion = Region(f"Bonus Slot {bonusSlot+1}", self.player, self.multiworld)
-            for bonusDupes in range(min(self.options.bonus_item_dupes.value + self.options.bonus_item_filler.value, 10)):
-                if bonusDupes < self.options.bonus_item_dupes.value:
+            for bonusDupes in range(min(self.options.bonus_item_copies.value + self.options.bonus_item_filler.value, 10)):
+                if bonusDupes < self.options.bonus_item_copies.value:
                     self.multiworld.itempool.append(self.create_bonus_key(bonusSlot))
                 else:
                     self.multiworld.itempool.append(self.create_item("Nothing"))
@@ -245,7 +245,7 @@ class SlotLockWorld(AutoWorld.World):
         self.multiworld.completion_condition[self.player] = lambda state: state.has_all([f"Unlock {i}" for i in self.multiworld.player_name.values()] + [f"Unlock Bonus Slot {i+1}" for i in range(self.options.bonus_item_slots.value)], self.player)
         if not self.options.free_starting_items.value:
             for slot in self.slots_to_lock:
-                for i in range(min(self.options.number_of_unlocks+self.options.unlock_item_filler,10)):
+                for i in range(min(self.options.unlock_item_copies+self.options.unlock_item_filler,10)):
                     def rule(state: CollectionState, slot=slot):
                         return state.has(f"Unlock {slot}", self.player)
                     self.get_location(f"Free Item {slot} {i+1}").access_rule = rule
