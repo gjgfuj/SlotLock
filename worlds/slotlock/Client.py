@@ -1,5 +1,6 @@
 from . import SlotLockWorld
 from CommonClient import ClientCommandProcessor, CommonContext, logger, server_loop, gui_enabled, get_base_parser
+from MultiServer import mark_raw
 from NetUtils import ClientStatus
 try:
     from NetUtils import HintStatus
@@ -7,8 +8,18 @@ except ImportError:
     pass
 import asyncio
 class SlotLockCommandProcessor(ClientCommandProcessor):
-    def _cmd_autohint(self):
-        logger.info("Toggling Autohint")
+    ctx: "SlotLockContext"
+    def _cmd_clear_autohint(self):
+        self.ctx.auto_hint_queue = []
+        logger.info("Cleared autohint queue.")
+    @mark_raw
+    def _cmd_queue_autohint(self, item):
+        if item:
+            self.ctx.auto_hint_queue.append(item)
+        else:
+            logger.info(f"Autohint queue: {self.ctx.auto_hint_queue}")
+    def _cmd_toggle_autohint(self):
+        logger.info(f"Toggling Locked Autohint to {not self.ctx.auto_hint_locked_items}")
         self.ctx.auto_hint_locked_items = not self.ctx.auto_hint_locked_items
 class SlotLockContext(CommonContext):
 
@@ -19,6 +30,7 @@ class SlotLockContext(CommonContext):
     want_slot_data = True
     checking_hints = False
     command_processor = SlotLockCommandProcessor
+    auto_hint_queue = []
     def __init__(self, server_address=None, password=None):
         CommonContext.__init__(self, server_address, password)
 
@@ -50,6 +62,9 @@ class SlotLockContext(CommonContext):
                     if any(item.item == hint["item"] for item in self.items_received):
                         if hasattr(self, "update_hint") and hint["status"] == HintStatus.HINT_PRIORITY:
                             self.update_hint(hint["location"],hint["finding_player"], HintStatus.HINT_NO_PRIORITY)
+            if len(self.auto_hint_queue) > 0 and self.hint_points >= real_hint_cost:
+                await self.send_msgs([{"cmd": "Say", "text": f"!hint {self.auto_hint_queue.pop(0)}"}])
+                break
             for hint in hintdata:
                 if self.slot_concerns_self(hint["finding_player"]):
                     if hint["location"]//10 not in hinted_count:
@@ -76,6 +91,7 @@ class SlotLockContext(CommonContext):
         if cmd == "Connected":
             self.game = self.slot_info[self.slot].game
             self.free_starting_items = args["slot_data"]["free_starting_items"]
+            self.auto_hint_queue = []
             try:
                 self.auto_hint_locked_items = args["slot_data"]["auto_hint_locked_items"]
             except KeyError:

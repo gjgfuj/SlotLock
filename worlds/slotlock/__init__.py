@@ -97,7 +97,7 @@ class SlotLockWorld(AutoWorld.World):
         item_name_to_id[f"Unlock Bonus Slot {i+1}"] = i + 1
         for j in range(10):
             location_name_to_id[f"Bonus Slot {i+1}{" " + str(j+1) if j > 0 else ""}"] = i*10 + j + 10
-    item_name_groups = {"Unlock Slots": set(f"Unlock_{num+1}" for num in range(5000)), "Unlock Bonus Slots": set(f"Unlock Bonus Slot {num+1}" for num in range(1000))}
+    item_name_groups = {"Slot Unlocks": set(f"Unlock_{num+1}" for num in range(5000)), "Bonus Slot Unlocks": set(f"Unlock Bonus Slot {num+1}" for num in range(1000))}
     location_name_groups = {"Slot Rewards": set(f"Lock_{num+1}" for num in range(50000)), "Bonus Slot Rewards": set([f"Bonus Slot {(num+10)//10}{" " + str((num % 10)+1) if (num % 10) > 0 else ""}" for num in range(1000)])}
     slots_to_lock = []
     def __init__(self, multiworld, player):
@@ -252,16 +252,22 @@ class SlotLockWorld(AutoWorld.World):
     def fill_slot_data(self):
         return {
             "free_starting_items": self.options.free_starting_items.value,
-            "auto_hint_locked_items": self.options.auto_hint_locked_items.value
+            "auto_hint_locked_items": self.options.auto_hint_locked_items.value,
+            "locked_slots": self.slots_to_lock,
+            "unlock_item_copies": self.options.unlock_item_copies.value,
+            "unlock_item_filler": max(10- self.options.unlock_item_copies.value, self.options.unlock_item_filler),
+            "bonus_item_copies": self.options.bonus_item_copies.value,
+            "bonus_item_filler": max(10- self.options.bonus_item_copies.value, self.options.bonus_item_filler),
+            "bonus_item_slots": self.options.bonus_item_slots.value
         }
     def post_fill(self) -> None:
         pass
     def modify_multidata(self, multidata: Dict[str, Any]):
         pass
-        #def hintfn(hint: Hint) -> Hint:
-        #    if hasattr(hint, "status") and self.multiworld.player_name[hint.receiving_player] in self.slots_to_lock:
-        #        from NetUtils import HintStatus
-        #        hint = hint.re_prioritize(None, HintStatus.HINT_UNSPECIFIED)
-        #    return hint
-        #for player in self.multiworld.player_ids:
-        #    multidata["precollected_hints"][player] = set(map(hintfn, multidata["precollected_hints"][player]))
+        def hintfn(hint: Hint) -> Hint:
+            if hasattr(hint, "status") and self.multiworld.player_name[hint.receiving_player] in self.slots_to_lock:
+                from NetUtils import HintStatus
+                hint = hint.re_prioritize(None, HintStatus.HINT_UNSPECIFIED)
+            return hint
+        for player in self.multiworld.player_ids:
+            multidata["precollected_hints"][player] = set(map(hintfn, multidata["precollected_hints"][player]))
