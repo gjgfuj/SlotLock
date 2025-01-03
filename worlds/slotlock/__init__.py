@@ -263,7 +263,6 @@ class SlotLockWorld(AutoWorld.World):
     def post_fill(self) -> None:
         pass
     def modify_multidata(self, multidata: Dict[str, Any]):
-        pass
         def hintfn(hint: Hint) -> Hint:
             if hasattr(hint, "status") and self.multiworld.player_name[hint.receiving_player] in self.slots_to_lock:
                 from NetUtils import HintStatus

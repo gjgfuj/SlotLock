@@ -13,11 +13,11 @@ class SlotLockCommandProcessor(ClientCommandProcessor):
         self.ctx.auto_hint_queue = []
         logger.info("Cleared autohint queue.")
     @mark_raw
-    def _cmd_queue_autohint(self, item):
+    def _cmd_queue_autohint(self, item=None):
         if item:
             self.ctx.auto_hint_queue.append(item)
-        else:
-            logger.info(f"Autohint queue: {self.ctx.auto_hint_queue}")
+        logger.info(f"Autohint queue: {self.ctx.auto_hint_queue}")
+        asyncio.create_task(ctx.check_hints())
     def _cmd_toggle_autohint(self):
         logger.info(f"Toggling Locked Autohint to {not self.ctx.auto_hint_locked_items}")
         self.ctx.auto_hint_locked_items = not self.ctx.auto_hint_locked_items
@@ -64,7 +64,9 @@ class SlotLockContext(CommonContext):
                             self.update_hint(hint["location"],hint["finding_player"], HintStatus.HINT_NO_PRIORITY)
             if len(self.auto_hint_queue) > 0 and self.hint_points >= real_hint_cost:
                 await self.send_msgs([{"cmd": "Say", "text": f"!hint {self.auto_hint_queue.pop(0)}"}])
-                break
+                await asyncio.sleep(1)
+                self.checking_hints = False
+                return
             for hint in hintdata:
                 if self.slot_concerns_self(hint["finding_player"]):
                     if hint["location"]//10 not in hinted_count:
