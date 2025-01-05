@@ -42,10 +42,15 @@ class SlotsToLockWhitelistOption(Toggle):
     """If the list of slots to lock should be treated as a blacklist rather than a whitelist. If true, will lock every slot listed. If false, will lock every slot except this one and any slot listed."""
     default = 1
     pass
-class FreeStartingItems(Toggle):
-    """If true, the free items should be sent out immediately, or if false the 'Unlock {slot_name}' item will be required. If false, it will require other worlds to be open in sphere 1 instead else there will be no worlds available."""
+class FreeSlotItems(Toggle):
+    """If true, the free items should be sent out immediately for locked worlds, or if false the 'Unlock {slot_name}' item will be required. If false, it will require other worlds to be open in sphere 1 instead else there will be no worlds available."""
     default = 1
     pass
+class FreeUnlockedWorldItems(Range):
+    """Adds filler and locations equal to this number, per starting slot of the world."""
+    default = 0
+    range_start = 0
+    range_end = 10
 class BonusItemSlots(Range):
     """Number of bonus item slots to include. These will be automatically unlocked when sent their individual keys."""
     default = 0
@@ -79,7 +84,8 @@ class SlotLockOptions(PerGameCommonOptions):
     bonus_item_slots: BonusItemSlots
     bonus_item_copies: BonusItemDupes
     bonus_item_filler: BonusItemFiller
-    free_starting_items: FreeStartingItems
+    free_starting_items: FreeSlotItems
+    free_unlocked_world_items: FreeUnlockedWorldItems
     random_unlocked_slots: RandomUnlockedSlots
     auto_hint_locked_items: AutoHintLockedItems
 
@@ -100,6 +106,7 @@ class SlotLockWorld(AutoWorld.World):
     item_name_groups = {"Slot Unlocks": set(f"Unlock_{num+1}" for num in range(5000)), "Bonus Slot Unlocks": set(f"Unlock Bonus Slot {num+1}" for num in range(1000))}
     location_name_groups = {"Slot Rewards": set(f"Lock_{num+1}" for num in range(50000)), "Bonus Slot Rewards": set([f"Bonus Slot {(num+10)//10}{" " + str((num % 10)+1) if (num % 10) > 0 else ""}" for num in range(1000)])}
     slots_to_lock = []
+    recursive_locks = []
     def __init__(self, multiworld, player):
         super().__init__(multiworld, player)
     def create_item(self, name: str):
@@ -170,27 +177,35 @@ class SlotLockWorld(AutoWorld.World):
                 option.value.add(f"Unlock {slot}")
         def add_slot_location_to_option(option, world):
             slot = world.player_name
-            if isinstance(option.value,dict) and (f"Lock_{world.player}" in option.value.keys()):
-                option.value[f"Free Item {slot} {i+1}"] = self.options.unlock_item_copies.value
-            elif (isinstance(option.value,list) or isinstance(option.value, set)) and (f"Lock_{world.player}" in option.value):
-                option.value.add(f"Free Item {slot} {i+1}")
+            for i in range(10):
+                if isinstance(option.value,dict) and (f"Lock_{world.player*10 + i}" in option.value.keys()):
+                    option.value[f"Free Item {slot} {i+1}"] = self.options.unlock_item_copies.value
+                elif (isinstance(option.value,list) or isinstance(option.value, set)) and (f"Lock_{world.player*10 + i}" in option.value):
+                    option.value.add(f"Free Item {slot} {i+1}")
         for world in self.multiworld.worlds.values():
             if world.player_name in slots_to_lock:
+                if isinstance(world, SlotLockWorld) and len(world.slots_to_lock) > 0:
+                    raise Exception(f"Recursive slot lock: {self.player_name} locking {world.player_name} which locks other worlds, this is not allowed.")
+
                 for i in range(min(10, self.options.unlock_item_copies.value + self.options.unlock_item_filler.value)):
                     self.region.add_locations({f"Free Item {world.player_name} {i+1}": self.location_name_to_id[f"Free Item {world.player_name} {i+1}"]}, LockLocation)
                     if i < self.options.unlock_item_copies.value:
                         self.multiworld.itempool.append(self.create_slotlock_item(world.player_name))
                     else:
                         self.multiworld.itempool.append(self.create_item("Nothing"))
-                    add_slot_location_to_option(self.options.exclude_locations, world)
-                    add_slot_location_to_option(self.options.priority_locations, world)
-                    add_slot_location_to_option(self.options.start_location_hints, world)
-                    add_slot_item_to_option(self.options.local_items, world)
-                    add_slot_item_to_option(self.options.non_local_items, world)
-                    add_slot_item_to_option(self.options.start_hints, world)
-                    add_slot_item_to_option(self.options.start_inventory, world)
             else:
                 self.multiworld.push_precollected(self.create_slotlock_item(world.player_name))
+                for i in range(min(10, self.options.free_unlocked_world_items.value)):
+                    self.multiworld.itempool.append(self.create_item("Nothing"))
+                    self.region.add_locations({f"Free Item {world.player_name} {i+1}": self.location_name_to_id[f"Free Item {world.player_name} {i+1}"]}, LockLocation)
+            add_slot_location_to_option(self.options.exclude_locations, world)
+            add_slot_location_to_option(self.options.priority_locations, world)
+            add_slot_location_to_option(self.options.start_location_hints, world)
+            add_slot_item_to_option(self.options.local_items, world)
+            add_slot_item_to_option(self.options.non_local_items, world)
+            add_slot_item_to_option(self.options.start_hints, world)
+            add_slot_item_to_option(self.options.start_inventory, world)
+
         self.multiworld.regions.append(self.region)
         for bonusSlot in range(self.options.bonus_item_slots.value):
             bonusSlotRegion = Region(f"Bonus Slot {bonusSlot+1}", self.player, self.multiworld)
@@ -255,9 +270,9 @@ class SlotLockWorld(AutoWorld.World):
             "auto_hint_locked_items": self.options.auto_hint_locked_items.value,
             "locked_slots": self.slots_to_lock,
             "unlock_item_copies": self.options.unlock_item_copies.value,
-            "unlock_item_filler": max(10- self.options.unlock_item_copies.value, self.options.unlock_item_filler),
+            "unlock_item_filler": min(10- self.options.unlock_item_copies.value, self.options.unlock_item_filler.value),
             "bonus_item_copies": self.options.bonus_item_copies.value,
-            "bonus_item_filler": max(10- self.options.bonus_item_copies.value, self.options.bonus_item_filler),
+            "bonus_item_filler": min(10- self.options.bonus_item_copies.value, self.options.bonus_item_filler.value),
             "bonus_item_slots": self.options.bonus_item_slots.value
         }
     def post_fill(self) -> None:
