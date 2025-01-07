@@ -21,6 +21,7 @@ class SlotLockCommandProcessor(ClientCommandProcessor):
     def _cmd_toggle_autohint(self):
         logger.info(f"Toggling Locked Autohint to {not self.ctx.auto_hint_locked_items}")
         self.ctx.auto_hint_locked_items = not self.ctx.auto_hint_locked_items
+        asyncio.create_task(self.ctx.check_hints())
 class SlotLockContext(CommonContext):
 
     # Text Mode to use !hint and such with games that have no text entry
@@ -31,6 +32,7 @@ class SlotLockContext(CommonContext):
     checking_hints = False
     command_processor = SlotLockCommandProcessor
     auto_hint_queue = []
+    locked_slots = []
     def __init__(self, server_address=None, password=None):
         CommonContext.__init__(self, server_address, password)
 
@@ -44,7 +46,12 @@ class SlotLockContext(CommonContext):
             await asyncio.sleep(1)
         self.checking_hints = True
         if f"_read_hints_{self.team}_{self.slot}" in self.stored_data:
-            hintdata = self.stored_data[f"_read_hints_{self.team}_{self.slot}"]
+            hintdata = self.stored_data[f"_read_hints_{self.team}_{self.slot}"].copy()
+            for slot in self.player_names:
+                player_name = self.player_names[slot]
+                if player_name in self.locked_slots:
+                    hintdata.extend(self.stored_data[f"_read_hints_{self.team}_{slot}"])
+                    #print(f"{player_name}: {self.stored_data[f"_read_hints_{self.team}_{slot}"]}")
             hinted_count = {}
             loc_count = {}
             real_hint_cost = max(1, int(self.hint_cost * 0.01 * self.total_locations))
@@ -67,18 +74,42 @@ class SlotLockContext(CommonContext):
                 await asyncio.sleep(1)
                 self.checking_hints = False
                 return
-            for hint in hintdata:
-                if self.slot_concerns_self(hint["finding_player"]):
-                    if hint["location"]//10 not in hinted_count:
-                        hinted_count[hint["location"]// 10] = 0
-                    if (not "status" in hint) or hint["status"] == HintStatus.HINT_PRIORITY:
-                        if not any(item.item == hint["location"]//10 for item in self.items_received) and not hint["found"] and hinted_count[hint["location"]//10] < 1:
-                            if self.hint_points >= real_hint_cost and self.auto_hint_locked_items:
-                                await self.send_msgs([{"cmd": "Say", "text": f"!hint {self.item_names.lookup_in_game(hint["location"]//10, "SlotLock")}"}])
-                                break
+            if self.auto_hint_locked_items:
+                for hint in hintdata:
+                    if self.slot_concerns_self(hint["finding_player"]):
+                        if hint["location"]//10 not in hinted_count:
+                            hinted_count[hint["location"]// 10] = 0
+                        if (not "status" in hint) or hint["status"] == HintStatus.HINT_PRIORITY:
+                            if not hint["found"] and hinted_count[hint["location"]//10] < 1:
+                                if self.hint_points >= real_hint_cost:
+                                    await self.send_hint(self.item_names.lookup_in_game(hint["location"]//10, "SlotLock"))
+                                    break
+                    elif hint["finding_player"] in self.locked_slots_nums:
+                        if (not "status" in hint) or hint["status"] == HintStatus.HINT_PRIORITY:
+                            if self.hint_points >= real_hint_cost and not hint["found"]:
+                                hinted = False
+                                for ahint in hintdata:
+                                    if self.slot_concerns_self(ahint["receiving_player"]) and ahint["item"] == hint["finding_player"]+1001:
+                                        hinted = True
+                                #print(f"Already hinted for {hint}: {hinted}")
+                                if not hinted:
+                                    await self.send_hint(f"Unlock {self.player_names[hint['finding_player']]}")
+                                    break
+                            else:
+                                pass
+                                #print(f"Skipping hint: {hint} because not enough hint points or hint already found. ")
+                        else:
+                            pass
+                            #print(f"Skipping hint: {hint} because not priority.")
+
         await asyncio.sleep(1)
         self.checking_hints = False
+    async def send_hint(self, item_name):
+        await self.send_msgs([{"cmd": "Say", "text": f"!hint {item_name}"}])
     def update_auto_locations(self):
+        for slot in self.locked_slots:
+            if f"Unlock {slot}" in [map(lambda item: self.item_names.lookup_in_game(item, "SlotLock"), self.items_received)]:
+                self.unlocked_slots.add(slot)
         self.locations_checked = set()
         for location in self.missing_locations:
             if any(item.item == location // 10 for item in self.items_received) or (location >= 10000 and self.free_starting_items):
@@ -93,11 +124,24 @@ class SlotLockContext(CommonContext):
         if cmd == "Connected":
             self.game = self.slot_info[self.slot].game
             self.free_starting_items = args["slot_data"]["free_starting_items"]
-            self.auto_hint_queue = []
+            self.locked_slots = args["slot_data"]["locked_slots"]
+            self.unlock_item_copies = args["slot_data"]["unlock_item_copies"]
+            self.unlock_item_filler = args["slot_data"]["unlock_item_filler"]
+            self.bonus_item_slots = args["slot_data"]["bonus_item_slots"]
+            self.bonus_item_copies = args["slot_data"]["bonus_item_copies"]
+            self.bonus_item_filler = args["slot_data"]["bonus_item_filler"]
             try:
                 self.auto_hint_locked_items = args["slot_data"]["auto_hint_locked_items"]
             except KeyError:
-                self.auto_hint_locked_items = True
+                self.auto_hint_locked_items = False
+            self.locked_slots_nums = []
+            for slot in self.player_names:
+                player_name = self.player_names[slot]
+                if player_name in self.locked_slots:
+                    self.locked_slots_nums.append(slot)
+            slots = [*map(lambda slot: f"_read_hints_{self.team}_{slot}",self.locked_slots_nums)]
+            for slot in slots:
+                self.set_notify(slot)
         if cmd == "ReceivedItems" or cmd == "Connected" or cmd == "RoomUpdate":
             self.update_auto_locations()
             asyncio.create_task(self.send_msgs([{"cmd": "LocationChecks",
