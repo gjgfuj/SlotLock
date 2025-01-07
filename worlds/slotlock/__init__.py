@@ -7,6 +7,7 @@ from worlds import AutoWorld
 from worlds.generic import GenericWorld
 from worlds.LauncherComponents import Component, components, icon_paths, launch_subprocess, Type
 from NetUtils import Hint
+from settings import Group
 
 def launch_client(*args):
     from .Client import launch
@@ -88,7 +89,6 @@ class SlotLockOptions(PerGameCommonOptions):
     free_unlocked_world_items: FreeUnlockedWorldItems
     random_unlocked_slots: RandomUnlockedSlots
     auto_hint_locked_items: AutoHintLockedItems
-
 
 class SlotLockWorld(AutoWorld.World):
     """Locks other player slots."""

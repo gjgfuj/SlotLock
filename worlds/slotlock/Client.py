@@ -2,6 +2,7 @@ from . import SlotLockWorld
 from CommonClient import ClientCommandProcessor, CommonContext, logger, server_loop, gui_enabled, get_base_parser
 from MultiServer import mark_raw
 from NetUtils import ClientStatus
+from settings import get_settings
 try:
     from NetUtils import HintStatus
 except ImportError:
@@ -17,11 +18,20 @@ class SlotLockCommandProcessor(ClientCommandProcessor):
         if item:
             self.ctx.auto_hint_queue.append(item)
         logger.info(f"Autohint queue: {self.ctx.auto_hint_queue}")
-        asyncio.create_task(ctx.check_hints())
+        asyncio.create_task(self.ctx.check_hints())
     def _cmd_toggle_autohint(self):
         logger.info(f"Toggling Locked Autohint to {not self.ctx.auto_hint_locked_items}")
         self.ctx.auto_hint_locked_items = not self.ctx.auto_hint_locked_items
         asyncio.create_task(self.ctx.check_hints())
+    @mark_raw
+    def _cmd_admin(self, password=None):
+        """Use admin rights for autohint. This automatically logs into the server. Password defaults to the one in host.yaml."""
+        self.ctx.use_server_password = True
+        if not password:
+            settings = get_settings()
+            password = settings.server_options.server_password
+        asyncio.create_task(self.ctx.send_msgs([{"cmd": "Say", "text": f"!admin login {password}"}]))
+
 class SlotLockContext(CommonContext):
 
     # Text Mode to use !hint and such with games that have no text entry
@@ -33,6 +43,7 @@ class SlotLockContext(CommonContext):
     command_processor = SlotLockCommandProcessor
     auto_hint_queue = []
     locked_slots = []
+    use_server_password = False
     def __init__(self, server_address=None, password=None):
         CommonContext.__init__(self, server_address, password)
 
@@ -105,7 +116,10 @@ class SlotLockContext(CommonContext):
         await asyncio.sleep(1)
         self.checking_hints = False
     async def send_hint(self, item_name):
-        await self.send_msgs([{"cmd": "Say", "text": f"!hint {item_name}"}])
+        if self.use_server_password:
+            await self.send_msgs([{"cmd": "Say", "text": f"!admin /hint {self.username} {item_name}"}])
+        else:
+            await self.send_msgs([{"cmd": "Say", "text": f"!hint {item_name}"}])
     def update_auto_locations(self):
         for slot in self.locked_slots:
             if f"Unlock {slot}" in [map(lambda item: self.item_names.lookup_in_game(item, "SlotLock"), self.items_received)]:
