@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Dict
 from BaseClasses import CollectionState, Item, ItemClassification, Location, MultiWorld, Region
-from Options import OptionSet, PerGameCommonOptions, Range, StartInventoryPool, Toggle, Choice
+from Options import OptionSet, PerGameCommonOptions, Range, StartInventoryPool, Toggle, Choice, OptionDict
 import worlds
 from worlds import AutoWorld
 from worlds.generic import GenericWorld
@@ -72,9 +72,17 @@ class RandomUnlockedSlots(Range):
     default = 0
     range_start = 0
     range_end = 100
-class AutoHintLockedItems(Toggle):
-    """Whether the slotlock client should automatically ask for a hint (as long as it has enough hint points) when one of its items are hinted. Does not include items in locked worlds, only locations belonging to slotlock itself."""
+class AutoHintLockedItems(Choice):
+    """Whether the slotlock client should automatically ask for a hint (as long as it has enough hint points) when one of its items are hinted. Does not include items in locked worlds, only locations belonging to slotlock itself. If 'admin', will automatically log in using the admin password in host.yaml and perform server hints."""
     default = 0
+    option_no = 0
+    option_yes = 1
+    option_admin = 2
+    alias_true = 1
+    alias_false = 0
+class AssociatedWorlds(OptionDict):
+    """Allows you to associate a list of worlds with another world. These worlds slot unlocks will then be unlocked at the same time as the primary world. Format `WorldName: [AssociatedWorld1,AssociatedWorld2]`. The maximum number of associated worlds per world is 10, and will cause the associated world to only have 1 copy of its world."""
+    pass
 
 @dataclass
 class SlotLockOptions(PerGameCommonOptions):
@@ -89,6 +97,7 @@ class SlotLockOptions(PerGameCommonOptions):
     free_unlocked_world_items: FreeUnlockedWorldItems
     random_unlocked_slots: RandomUnlockedSlots
     auto_hint_locked_items: AutoHintLockedItems
+    associated_worlds: AssociatedWorlds
 
 class SlotLockWorld(AutoWorld.World):
     """Locks other player slots."""
@@ -107,6 +116,7 @@ class SlotLockWorld(AutoWorld.World):
     location_name_groups = {"Slot Rewards": set(f"Lock_{num+1}" for num in range(50000)), "Bonus Slot Rewards": set([f"Bonus Slot {(num+10)//10}{" " + str((num % 10)+1) if (num % 10) > 0 else ""}" for num in range(1000)])}
     slots_to_lock = []
     recursive_locks = []
+    associated_worlds = set()
     def __init__(self, multiworld, player):
         super().__init__(multiworld, player)
     def create_item(self, name: str):
@@ -167,6 +177,10 @@ class SlotLockWorld(AutoWorld.World):
             slots_to_lock.remove(self.random.choice(slots_to_lock))
         print(f"{self.player_name}: Locking {slots_to_lock}")
         self.slots_to_lock = slots_to_lock
+        for world in self.options.associated_worlds:
+            for associated_world in self.options.associated_worlds[world]:
+                if world in slots_to_lock and associated_world in slots_to_lock:
+                    self.associated_worlds.add(associated_world)
         #(creating regions in create_items to run always after create_regions for everything else.)
         self.region = Region("Menu",self.player,self.multiworld)
         def add_slot_item_to_option(option, world):
@@ -186,13 +200,27 @@ class SlotLockWorld(AutoWorld.World):
             if world.player_name in slots_to_lock:
                 if isinstance(world, SlotLockWorld) and len(world.slots_to_lock) > 0:
                     raise Exception(f"Recursive slot lock: {self.player_name} locking {world.player_name} which locks other worlds, this is not allowed.")
-
                 for i in range(min(10, self.options.unlock_item_copies.value + self.options.unlock_item_filler.value)):
                     self.region.add_locations({f"Free Item {world.player_name} {i+1}": self.location_name_to_id[f"Free Item {world.player_name} {i+1}"]}, LockLocation)
-                    if i < self.options.unlock_item_copies.value:
+                    if i < self.options.unlock_item_copies.value and world.player_name not in self.associated_worlds:
                         self.multiworld.itempool.append(self.create_slotlock_item(world.player_name))
                     else:
                         self.multiworld.itempool.append(self.create_item("Nothing"))
+                fixedLocations = []
+                if world.player_name in self.options.associated_worlds.keys():
+                    for associated_world in self.options.associated_worlds[world.player_name]:
+                        if associated_world in self.associated_worlds:
+                            location: Location = self.region.get_locations().pop()
+                            location.place_locked_item(self.create_slotlock_item(associated_world))
+                            index = -1
+                            while self.multiworld.itempool[index].name != "Nothing":
+                                index -= 1
+                            self.multiworld.itempool.pop(index)
+                            fixedLocations.append(location)
+                        else:
+                            print(f"{self.player_name} Warning: associated world {associated_world} not real world.")
+                self.region.get_locations().extend(fixedLocations)
+
             else:
                 self.multiworld.push_precollected(self.create_slotlock_item(world.player_name))
                 for i in range(min(10, self.options.free_unlocked_world_items.value)):
