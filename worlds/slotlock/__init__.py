@@ -108,6 +108,7 @@ class SlotLockWorld(AutoWorld.World):
     location_name_to_id = {f"Lock_{num+1}": num+10010 for num in range(50000)}
     item_name_to_id = {f"Unlock_{num+1}": num+1001 for num in range(5000)}
     item_name_to_id["Nothing"] = 6999
+    multiworld : MultiWorld
     for i in range(1000):
         item_name_to_id[f"Unlock Bonus Slot {i+1}"] = i + 1
         for j in range(10):
@@ -305,6 +306,22 @@ class SlotLockWorld(AutoWorld.World):
         }
     def post_fill(self) -> None:
         pass
+    def collect(self,state: CollectionState, item: Item):
+        if "Unlock " in item.name and item.name.split("Unlock ")[1] in self.slots_to_lock:
+            player_name = item.name.split("Unlock ")[1]
+            for world in self.multiworld.worlds:
+                if self.multiworld.worlds[world].player_name == player_name:
+                    state.update_reachable_regions(world)
+                    # print(f"Marking {player_name} as stale due to collection of {item.name}")
+        return super().collect(state,item)
+    def remove(self,state: CollectionState, item: Item):
+        if "Unlock " in item.name and item.name.split("Unlock ")[1] in self.slots_to_lock:
+            player_name = item.name.split("Unlock ")[1]
+            for world in self.multiworld.worlds:
+                if world.player_name == player_name:
+                    state.update_reachable_regions(world)
+                    # print(f"Marking {player_name} as stale due to removal of {item.name}")
+        return super().collect(state,item)
     def modify_multidata(self, multidata: Dict[str, Any]):
         def hintfn(hint: Hint) -> Hint:
             if hasattr(hint, "status") and self.multiworld.player_name[hint.receiving_player] in self.slots_to_lock:
