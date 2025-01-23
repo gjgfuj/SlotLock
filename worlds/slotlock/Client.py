@@ -64,6 +64,10 @@ class SlotLockContext(CommonContext):
                 return
             await self.check_hints()
             await asyncio.sleep(1)
+    def make_gui(self):
+        ui = super().make_gui()
+        ui.base_title = "Slotlock Client"
+        return ui
     async def check_hints(self):
         if f"_read_hints_{self.team}_{self.slot}" in self.stored_data:
             hintdata = self.stored_data[f"_read_hints_{self.team}_{self.slot}"].copy()
