@@ -6,26 +6,36 @@ import random
 tracker_loaded = True
 from worlds.tracker.TrackerClient import TrackerGameContext
 
-class SlowRleaseCommandProcessor(ClientCommandProcessor):
-    pass
+class SlowReleaseCommandProcessor(ClientCommandProcessor):
+    def _cmd_time(self, time):
+        self.ctx.time_per = float(time)
 class SlowReleaseContext(TrackerGameContext):
     time_per = 10
     tags = ["SlowRelease", "Tracker"]
     game = ""
     has_game = False
+    command_processor = SlowReleaseCommandProcessor
 
     async def autoplayer(self):
         print("Autoplayer")
+        inbk = False
         while not self.player_id:
             await asyncio.sleep(1)
         while True:
             if len(self.locations_available) > 0:
+                inbk = False
                 goal_location = random.choice(self.locations_available)
                 logger.info(f"Going for {self.location_names.lookup_in_game(goal_location)}")
                 await asyncio.sleep(self.time_per)
                 await self.check_locations([goal_location])
+                await asyncio.sleep(0.1)
             else:
-                await asyncio.sleep(1)
+                if inbk:
+                    await asyncio.sleep(1)
+                else:
+                    logger.info("In BK.")
+                    inbk = True
+                    await asyncio.sleep(1)
     def on_package(self, cmd, args):
         super().on_package(cmd, args)
         if cmd == "Connected":
