@@ -19,12 +19,10 @@ class SlotLockCommandProcessor(ClientCommandProcessor):
             self.ctx.auto_hint_queue.append(item)
         logger.info(f"Autohint queue: {self.ctx.auto_hint_queue}")
         self.ctx.checking_hints = False
-        asyncio.create_task(self.ctx.check_hints())
     def _cmd_toggle_autohint(self):
         logger.info(f"Toggling Locked Autohint to {not self.ctx.auto_hint_locked_items}")
         self.ctx.auto_hint_locked_items = not self.ctx.auto_hint_locked_items
         self.ctx.checking_hints =  False
-        asyncio.create_task(self.ctx.check_hints())
     @mark_raw
     def _cmd_admin(self, password=None):
         """Use admin rights for autohint. This automatically logs into the server. Password defaults to the one in host.yaml."""
@@ -33,6 +31,9 @@ class SlotLockCommandProcessor(ClientCommandProcessor):
             password = settings.server_options.server_password
         self.ctx.use_server_password = password
         asyncio.create_task(self.ctx.send_msgs([{"cmd": "Say", "text": f"!admin login {password}"}]))
+    def _cmd_unlocked_slots(self):
+        for slot in self.ctx.unlocked_slots:
+            logger.info(f"{slot}")
 
 class SlotLockContext(CommonContext):
 
@@ -45,7 +46,10 @@ class SlotLockContext(CommonContext):
     command_processor = SlotLockCommandProcessor
     auto_hint_queue = []
     locked_slots = []
+    unlocked_slots = []
     use_server_password = False
+    connected = False
+    has_hinted = []
     def __init__(self, server_address=None, password=None):
         CommonContext.__init__(self, server_address, password)
 
@@ -54,10 +58,13 @@ class SlotLockContext(CommonContext):
             await super(TextContext, self).server_auth(password_requested)
         await self.get_username()
         await self.send_connect()
-    async def check_hints(self):
-        while self.checking_hints:
+    async def run_checking_hints(self):
+        while True:
+            if not self.connected:
+                return
+            await self.check_hints()
             await asyncio.sleep(1)
-        self.checking_hints = True
+    async def check_hints(self):
         if f"_read_hints_{self.team}_{self.slot}" in self.stored_data:
             hintdata = self.stored_data[f"_read_hints_{self.team}_{self.slot}"].copy()
             for slot in self.player_names:
@@ -97,7 +104,7 @@ class SlotLockContext(CommonContext):
                                 if self.hint_points >= real_hint_cost:
                                     await self.send_hint(self.item_names.lookup_in_game(hint["location"]//10, "SlotLock"))
                                     self.checking_hints = False
-                                    asyncio.sleep(2)
+                                    await asyncio.sleep(2)
                                     return
                     elif hint["finding_player"] in self.locked_slots_nums:
                         if (not "status" in hint) or hint["status"] == HintStatus.HINT_PRIORITY:
@@ -109,8 +116,7 @@ class SlotLockContext(CommonContext):
                                 #print(f"Already hinted for {hint}: {hinted}")
                                 if not hinted:
                                     await self.send_hint(f"Unlock {self.player_names[hint['finding_player']]}")
-                                    self.checking_hints = False
-                                    asyncio.sleep(2)
+                                    await asyncio.sleep(2)
                                     return
                             else:
                                 pass
@@ -118,10 +124,11 @@ class SlotLockContext(CommonContext):
                         else:
                             pass
                             #print(f"Skipping hint: {hint} because not priority.")
-
         await asyncio.sleep(1)
-        self.checking_hints = False
     async def send_hint(self, item_name):
+        if item_name in self.has_hinted:
+            return
+        self.has_hinted.append(item_name)
         if self.use_server_password:
             await self.send_msgs([{"cmd": "Say", "text": f"!admin login {self.use_server_password}"}])
             await asyncio.sleep(1)
@@ -129,9 +136,12 @@ class SlotLockContext(CommonContext):
         else:
             await self.send_msgs([{"cmd": "Say", "text": f"!hint {item_name}"}])
     def update_auto_locations(self):
-        for slot in self.locked_slots:
-            if f"Unlock {slot}" in [map(lambda item: self.item_names.lookup_in_game(item, "SlotLock"), self.items_received)]:
-                self.unlocked_slots.add(slot)
+        self.unlocked_slots = []
+        received_items = [*map(lambda item: self.item_names.lookup_in_game(item.item, "SlotLock"), self.items_received)]
+        print(received_items)
+        for slot in self.player_names.values():
+            if f"Unlock {slot}" in received_items:
+                self.unlocked_slots.append(slot)
         self.locations_checked = set()
         for location in self.missing_locations:
             if any(item.item == location // 10 for item in self.items_received) or (location >= 10000 and self.free_starting_items):
@@ -142,7 +152,6 @@ class SlotLockContext(CommonContext):
 
 
     def on_package(self, cmd: str, args: dict):
-        asyncio.create_task(self.check_hints())
         if cmd == "Connected":
             self.game = self.slot_info[self.slot].game
             self.free_starting_items = args["slot_data"]["free_starting_items"]
@@ -152,6 +161,8 @@ class SlotLockContext(CommonContext):
             self.bonus_item_slots = args["slot_data"]["bonus_item_slots"]
             self.bonus_item_copies = args["slot_data"]["bonus_item_copies"]
             self.bonus_item_filler = args["slot_data"]["bonus_item_filler"]
+            self.connected = True
+            asyncio.create_task(self.run_checking_hints())
             try:
                 self.auto_hint_locked_items = args["slot_data"]["auto_hint_locked_items"]
                 if self.auto_hint_locked_items == 2:
