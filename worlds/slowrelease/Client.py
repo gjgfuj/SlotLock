@@ -38,6 +38,10 @@ class SlowReleaseContext(TrackerGameContext):
                     logger.info("In BK.")
                     inbk = True
                     await asyncio.sleep(1)
+    def make_gui(self):
+        ui = super().make_gui()
+        ui.base_title = "Slow Release Client"
+        return ui
     def on_package(self, cmd, args):
         super().on_package(cmd, args)
         if cmd == "Connected":
