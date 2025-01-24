@@ -16,6 +16,7 @@ class SlowReleaseContext(TrackerGameContext):
     game = ""
     has_game = False
     command_processor = SlowReleaseCommandProcessor
+    autoplayer_task = None
 
     async def autoplayer(self):
         print("Autoplayer")
@@ -44,7 +45,13 @@ class SlowReleaseContext(TrackerGameContext):
                 self.tags.remove("Tracker")
                 asyncio.create_task(self.send_msgs([{"cmd": "ConnectUpdate", "tags": self.tags}]))
 
-            asyncio.create_task(self.autoplayer())
+            self.autoplayer_task = asyncio.create_task(self.autoplayer())
+    def disconnect(self, *args):
+        if self.autoplayer_task:
+            self.autoplayer_task.cancel()
+        if "Tracker" not in self.tags:
+            self.tags.append("Tracker")
+        return super().disconnect(*args)
 def launch(*args):
 
     async def main(args):
