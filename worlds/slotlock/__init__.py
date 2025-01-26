@@ -323,6 +323,8 @@ class SlotLockWorld(AutoWorld.World):
                     # print(f"Marking {player_name} as stale due to removal of {item.name}")
         return super().collect(state,item)
     def modify_multidata(self, multidata: Dict[str, Any]):
+        if len(self.slots_to_lock) == 0:
+            return
         def hintfn(hint: Hint) -> Hint:
             if hasattr(hint, "status") and self.multiworld.player_name[hint.receiving_player] in self.slots_to_lock:
                 from NetUtils import HintStatus
@@ -330,3 +332,14 @@ class SlotLockWorld(AutoWorld.World):
             return hint
         for player in self.multiworld.player_ids:
             multidata["precollected_hints"][player] = set(map(hintfn, multidata["precollected_hints"][player]))
+
+    def extend_hint_information(self, hint_data: Dict[int, Dict[int, str]]):
+        """
+        Fill in additional entrance information text into locations, which is displayed when hinted.
+        structure is {player_id: {location_id: text}} You will need to insert your own player_id.
+        """
+        data = {}
+        for location in self.get_locations():
+           data[location.address] = str(self.multiworld.find_item_locations(self.item_id_to_name[location.address // 10],self.player, True)).removeprefix("[").removesuffix("]")
+        hint_data[self.player] = data
+
