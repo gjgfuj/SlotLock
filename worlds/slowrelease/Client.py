@@ -4,9 +4,9 @@ from CommonClient import ClientCommandProcessor, CommonContext, logger, server_l
 import asyncio
 import random
 tracker_loaded = True
-from worlds.tracker.TrackerClient import TrackerGameContext
+from worlds.tracker.TrackerClient import TrackerGameContext, TrackerCommandProcessor
 
-class SlowReleaseCommandProcessor(ClientCommandProcessor):
+class SlowReleaseCommandProcessor(TrackerCommandProcessor):
     def _cmd_time(self, time):
         """Set the time per check."""
         self.ctx.time_per = float(time)
