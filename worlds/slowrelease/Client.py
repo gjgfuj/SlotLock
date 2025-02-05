@@ -1,6 +1,7 @@
 
 from CommonClient import ClientCommandProcessor, CommonContext, logger, server_loop, gui_enabled, get_base_parser
-
+from worlds.AutoWorld import World
+from BaseClasses import Region
 import asyncio
 import random
 tracker_loaded = True
@@ -10,24 +11,53 @@ class SlowReleaseCommandProcessor(TrackerCommandProcessor):
     def _cmd_time(self, time):
         """Set the time per check."""
         self.ctx.time_per = float(time)
+        logger.info(f"Set time per check to {self.ctx.time_per}")
+
+    def _cmd_region_mode(self):
+        """Toggle Region mode (i.e. make the slow release client act more like a player by handling one region of the world at a time.)"""
+        self.ctx.region_mode = not self.ctx.region_mode
+        logger.info(f"Set region mode to {self.ctx.region_mode}")
+
 class SlowReleaseContext(TrackerGameContext):
     time_per = 10
     tags = ["SlowRelease", "Tracker"]
     game = ""
     has_game = False
+    region_mode = True
     command_processor = SlowReleaseCommandProcessor
     autoplayer_task = None
-
+    def autoplayer_log(self, message):
+        logger.info(message)
     async def autoplayer(self):
         print("Autoplayer")
         inbk = False
         while not self.player_id:
             await asyncio.sleep(1)
+        world: World = self.multiworld.worlds[self.player_id]
+        current_region : Region = self.multiworld.get_region(world.origin_region_name, self.player_id)
         while True:
             if len(self.locations_available) > 0:
                 inbk = False
-                goal_location = random.choice(self.locations_available)
-                logger.info(f"Going for {self.location_names.lookup_in_game(goal_location)}")
+                goal_location = None
+                visited_regions = [self.multiworld.get_region(world.origin_region_name, self.player_id)]
+                regions = [*map(lambda e: e.connected_region,self.multiworld.get_region(world.origin_region_name, self.player_id).get_exits())]
+                if self.region_mode:
+                    while not goal_location:
+                        for location in self.locations_available:
+                            location = world.get_location(world.location_id_to_name[location])
+                            if location.parent_region == current_region:
+                                goal_location = location.address
+                                self.autoplayer_log(f"Going for {self.location_names.lookup_in_game(goal_location)}")
+                                break
+                        if not goal_location:
+                            current_region = random.choice(regions)
+                            regions += [*map(lambda e: e.connected_region, current_region.get_exits())]
+                            regions.remove(current_region)
+                            self.autoplayer_log(f"Attempting to go to: {current_region.name}")
+                            await asyncio.sleep(0.1)
+                else:
+                    goal_location = random.choice(self.locations_available)
+                    self.autoplayer_log(f"Going for {self.location_names.lookup_in_game(goal_location)}")
                 await asyncio.sleep(self.time_per)
                 await self.check_locations([goal_location])
                 await asyncio.sleep(0.1)
@@ -35,7 +65,7 @@ class SlowReleaseContext(TrackerGameContext):
                 if inbk:
                     await asyncio.sleep(1)
                 else:
-                    logger.info("In BK.")
+                    self.autoplayer_log("In BK.")
                     inbk = True
                     await asyncio.sleep(1)
     def make_gui(self):
