@@ -153,7 +153,7 @@ class SlotLockWorld(AutoWorld.World):
                 bonus_locations.add(f"Bonus Slot {i+1}{" " + str(j+1) if j > 0 else ""}")
         cls.item_name_to_id = item_name_to_id
         cls.location_name_to_id = location_name_to_id
-        cls.item_name_groups = {"Everything": set(world_unlock_items.union(bonus_items).union(set("Nothing"))), "Slot Unlocks": world_unlock_items, "Bonus Slot Unlocks": bonus_items}
+        cls.item_name_groups = {"Everything": set(world_unlock_items.union(bonus_items).union(("Nothing",))), "Slot Unlocks": world_unlock_items, "Bonus Slot Unlocks": bonus_items}
         cls.location_name_groups = {"Everywhere": set(world_unlock_locations.union(bonus_locations)), "Slot Rewards": world_unlock_locations, "Bonus Slot Rewards": bonus_locations}
 
         # update datapackage checksum
