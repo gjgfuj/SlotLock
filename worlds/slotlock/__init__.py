@@ -6,7 +6,7 @@ import worlds
 from worlds import AutoWorld
 from worlds.generic import GenericWorld
 from worlds.LauncherComponents import Component, components, icon_paths, launch_subprocess, Type
-from NetUtils import Hint
+from NetUtils import Hint, SlotType
 from settings import Group
 
 def launch_client(*args):
@@ -138,11 +138,12 @@ class SlotLockWorld(AutoWorld.World):
         bonus_locations = set()
         bonus_items = set()
         for id, world in multiworld.worlds.items():
-            item_name_to_id[f"Unlock {world.player_name}"] = id + 1001
-            world_unlock_items.add(f"Unlock {world.player_name}")
-            for i in range(10):
-                location_name_to_id[f"Free Item {world.player_name} {i+1}"] = id*10 + i + 10010
-                world_unlock_locations.add(f"Free Item {world.player_name} {i+1}")
+            if multiworld.player_types[id] == SlotType.player:
+                item_name_to_id[f"Unlock {world.player_name}"] = id + 1001
+                world_unlock_items.add(f"Unlock {world.player_name}")
+                for i in range(10):
+                    location_name_to_id[f"Free Item {world.player_name} {i+1}"] = id*10 + i + 10010
+                    world_unlock_locations.add(f"Free Item {world.player_name} {i+1}")
         item_name_to_id["Nothing"] = 6999
         for i in range(1000):
             item_name_to_id[f"Unlock Bonus Slot {i+1}"] = i + 1
@@ -158,7 +159,10 @@ class SlotLockWorld(AutoWorld.World):
         # update datapackage checksum
         worlds.network_data_package["games"][cls.game] = cls.get_data_package_data()
     def create_slotlock_item(self, slotName: str) -> LockItem:
-        return LockItem(self,self.multiworld.world_name_lookup[slotName])
+        try:
+            return LockItem(self,self.multiworld.world_name_lookup[slotName])
+        except KeyError:
+            return None
     def create_bonus_key(self, bonusSlot: int) -> Item:
         return Item(f"Unlock Bonus Slot {bonusSlot+1}", ItemClassification.progression,bonusSlot+1,self.player)
     def create_items(self) -> None:
@@ -171,6 +175,7 @@ class SlotLockWorld(AutoWorld.World):
             slots_to_lock = [slot for slot in self.options.slots_to_lock.value if any(slot == world.player_name for world in self.multiworld.worlds.values())]
         else:
             slots_to_lock = [slot.player_name for slot in self.multiworld.worlds.values() if slot.player_name not in self.options.slots_to_lock.value and slot.player_name != self.player_name]
+        slots_to_lock = [slot for slot in slots_to_lock if slot in self.multiworld.world_name_lookup and self.multiworld.player_types[self.multiworld.world_name_lookup[slot]] == SlotType.player]
         if self.options.random_unlocked_slots.value > len(slots_to_lock):
             raise RuntimeError("Too many random unlocked slots.")
         for i in range(self.options.random_unlocked_slots.value):
@@ -222,10 +227,13 @@ class SlotLockWorld(AutoWorld.World):
                 self.region.get_locations().extend(fixedLocations)
 
             else:
-                self.multiworld.push_precollected(self.create_slotlock_item(world.player_name))
-                for i in range(min(10, self.options.free_unlocked_world_items.value)):
-                    self.multiworld.itempool.append(self.create_item("Nothing"))
-                    self.region.add_locations({f"Free Item {world.player_name} {i+1}": self.location_name_to_id[f"Free Item {world.player_name} {i+1}"]}, LockLocation)
+                try:
+                    self.multiworld.push_precollected(self.create_slotlock_item(world.player_name))
+                    for i in range(min(10, self.options.free_unlocked_world_items.value)):
+                        self.multiworld.itempool.append(self.create_item("Nothing"))
+                        self.region.add_locations({f"Free Item {world.player_name} {i+1}": self.location_name_to_id[f"Free Item {world.player_name} {i+1}"]}, LockLocation)
+                except AttributeError:
+                    pass
             add_slot_location_to_option(self.options.exclude_locations, world)
             add_slot_location_to_option(self.options.priority_locations, world)
             add_slot_location_to_option(self.options.start_location_hints, world)
@@ -281,7 +289,7 @@ class SlotLockWorld(AutoWorld.World):
                     world.options.progression_balancing.value = 0
 
     def set_rules(self) -> None:
-        self.multiworld.completion_condition[self.player] = lambda state: state.has_all([f"Unlock {i}" for i in self.multiworld.player_name.values()] + [f"Unlock Bonus Slot {i+1}" for i in range(self.options.bonus_item_slots.value)], self.player)
+        self.multiworld.completion_condition[self.player] = lambda state: state.has_all([f"Unlock {i}" for i in self.slots_to_lock] + [f"Unlock Bonus Slot {i+1}" for i in range(self.options.bonus_item_slots.value)], self.player)
         if not self.options.free_starting_items.value:
             for slot in self.slots_to_lock:
                 for i in range(min(self.options.unlock_item_copies+self.options.unlock_item_filler,10)):
