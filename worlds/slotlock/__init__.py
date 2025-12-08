@@ -191,16 +191,31 @@ class SlotLockWorld(AutoWorld.World):
         def add_slot_item_to_option(option, world):
             slot = world.player_name
             if isinstance(option.value,dict) and (f"Unlock_{world.player}" in option.value.keys()):
-                option.value[f"Unlock {slot}"] = self.options.unlock_item_copies.value
+                option.value[f"Unlock {slot}"] = option.value[f"Unlock_{world.player}"]
+                del option.value[f"Unlock_{world.player}"]
             elif (isinstance(option.value,list) or isinstance(option.value,set)) and (f"Unlock_{world.player}" in option.value):
                 option.value.add(f"Unlock {slot}")
+                option.value.remove(f"Unlock_{world.player}")
+        def remove_slot_item_from_option(option, world):
+            if isinstance(option.value,dict) and (f"Unlock_{world}" in option.value.keys()):
+                del option.value[f"Unlock_{world}"]
+            elif (isinstance(option.value,list) or isinstance(option.value,set)) and (f"Unlock_{world}" in option.value):
+                option.value.remove(f"Unlock_{world}")
         def add_slot_location_to_option(option, world):
             slot = world.player_name
             for i in range(10):
                 if isinstance(option.value,dict) and (f"Lock_{world.player*10 + i}" in option.value.keys()):
-                    option.value[f"Free Item {slot} {i+1}"] = self.options.unlock_item_copies.value
+                    option.value[f"Free Item {slot} {i+1}"] = option.value[f"Lock_{world.player*10 + i}"]
+                    del option.value[f"Lock_{world.player*10 + i}"]
                 elif (isinstance(option.value,list) or isinstance(option.value, set)) and (f"Lock_{world.player*10 + i}" in option.value):
                     option.value.add(f"Free Item {slot} {i+1}")
+                    option.value.remove(f"Lock_{world.player*10 + i}")
+        def remove_slot_location_from_option(option, world):
+            for i in range(10):
+                if isinstance(option.value,dict) and (f"Lock_{world*10 + i}" in option.value.keys()):
+                    del option.value[f"Lock_{world*10 + i}"]
+                elif (isinstance(option.value,list) or isinstance(option.value, set)) and (f"Lock_{world*10 + i}" in option.value):
+                    option.value.remove(f"Lock_{world*10 + i}")
         for world in self.multiworld.worlds.values():
             if world.player_name in slots_to_lock:
                 if isinstance(world, SlotLockWorld) and len(world.slots_to_lock) > 0:
@@ -234,14 +249,22 @@ class SlotLockWorld(AutoWorld.World):
                         self.region.add_locations({f"Free Item {world.player_name} {i+1}": self.location_name_to_id[f"Free Item {world.player_name} {i+1}"]}, LockLocation)
                 except AttributeError:
                     pass
-            add_slot_location_to_option(self.options.exclude_locations, world)
-            add_slot_location_to_option(self.options.priority_locations, world)
-            add_slot_location_to_option(self.options.start_location_hints, world)
-            add_slot_item_to_option(self.options.local_items, world)
-            add_slot_item_to_option(self.options.non_local_items, world)
-            add_slot_item_to_option(self.options.start_hints, world)
-            add_slot_item_to_option(self.options.start_inventory, world)
-
+            if self.multiworld.player_types[world.player] == SlotType.player:
+                add_slot_location_to_option(self.options.exclude_locations, world)
+                add_slot_location_to_option(self.options.priority_locations, world)
+                add_slot_location_to_option(self.options.start_location_hints, world)
+                add_slot_item_to_option(self.options.local_items, world)
+                add_slot_item_to_option(self.options.non_local_items, world)
+                add_slot_item_to_option(self.options.start_hints, world)
+                add_slot_item_to_option(self.options.start_inventory, world)
+        for world in range(5001):
+            remove_slot_location_from_option(self.options.exclude_locations, world)
+            remove_slot_location_from_option(self.options.priority_locations, world)
+            remove_slot_location_from_option(self.options.start_location_hints, world)
+            remove_slot_item_from_option(self.options.local_items, world)
+            remove_slot_item_from_option(self.options.non_local_items, world)
+            remove_slot_item_from_option(self.options.start_hints, world)
+            remove_slot_item_from_option(self.options.start_inventory, world)
         self.multiworld.regions.append(self.region)
         for bonusSlot in range(self.options.bonus_item_slots.value):
             bonusSlotRegion = Region(f"Bonus Slot {bonusSlot+1}", self.player, self.multiworld)
