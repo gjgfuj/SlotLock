@@ -211,7 +211,7 @@ class SlotLockContext(CommonContext):
                         if f"Unlock {slot[3]}" == item_name: #find where this slot was found, likely from slot 0; archipelago.
                             self.slot_dependency[slot[1]] = item.player
                             break
-                break
+                    break
         for item in self.items_received:
             item_name = self.item_names.lookup_in_game(item.item, "SlotLock")
             for slot in self.players:
@@ -222,28 +222,40 @@ class SlotLockContext(CommonContext):
 
     #start the display sequence. 
     def display_dependencies(self):
+        temp_slot_dependency = self.slot_dependency.copy()
         for recieve in self.slot_dependency:
             give = self.slot_dependency[recieve]
-            if not (give in self.slot_dependency): #if this slot does not yet have a known game that unlocks it.
+            if not ((give in self.slot_dependency) or (give < 1)):
+                temp_slot_dependency[give] = -1 #add temp exta things for unhinted games. So they show up as mystery.
+
+        for recieve in temp_slot_dependency:
+            give = temp_slot_dependency[recieve]
+            if not (give in temp_slot_dependency): #if this slot does not yet have a known game that unlocks it.
                 recieve_name = ""
                 for player in self.players: 
                     if recieve == player[1]: # find the info on this slot.
                         recieve_name = player[2]
                         break
-                logger.info(f"{recieve_name}") #Display the correct game name
-                self.recusion_display(recieve, "  |  ") #Start the recusion with a sinlge bar.
+                if recieve_name in self.unlocked_slots or self.slot == recieve: #Display the correct game name with current state
+                    logger.info(f"{recieve_name}     (Unlocked)")
+                else:
+                    logger.info(f"{recieve_name}     (Mystery)")
+                self.recusion_display(temp_slot_dependency, recieve, "  |  ") #Start the recusion with a sinlge bar.
 
-    def recusion_display(self, previous_layer, depth):
-        for recieve in self.slot_dependency:
-            give = self.slot_dependency[recieve]
+    def recusion_display(self, temp_slot_dependency, previous_layer, depth):
+        for recieve in temp_slot_dependency:
+            give = temp_slot_dependency[recieve]
             if give == previous_layer: #if the game is unlocked by the previous layer.
                 recieve_name = ""
                 for player in self.players:
                     if recieve == player[1]: # find the info on this slot.
                         recieve_name = player[2]
                         break
-                logger.info(f"{depth} {recieve_name}") #Display the correct game name With the extra depth part.
-                self.recusion_display(recieve, depth + "  |  ") #do more recursion with an extra line.
+                if recieve_name in self.unlocked_slots: #Display the correct game name with current state and extra depth
+                    logger.info(f"{depth}{recieve_name}     (Unlocked)")
+                else:
+                    logger.info(f"{depth}{recieve_name}     (Hinted)")
+                self.recusion_display(temp_slot_dependency, recieve, depth + "  |  ") #do more recursion with an extra line.
 
 
     def on_package(self, cmd: str, args: dict):
