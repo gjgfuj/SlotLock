@@ -64,8 +64,7 @@ class SlotLockContext(CommonContext):
         CommonContext.__init__(self, server_address, password)
 
     async def server_auth(self, password_requested: bool = False):
-        if password_requested and not self.password:
-            await super(CommonContext, self).server_auth(password_requested)
+        await super().server_auth(password_requested)
         await self.get_username()
         await self.send_connect()
     async def run_checking_hints(self):
