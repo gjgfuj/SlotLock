@@ -40,9 +40,9 @@ class SlotLockCommandProcessor(ClientCommandProcessor):
         """List all unlocked slots."""
         for slot in self.ctx.unlocked_slots:
             logger.info(f"{slot}")
-    def _cmd_create_tree(self):
-        """Make a tree of all the unlocked slots"""
-        self.ctx.display_dependencies()
+    def _cmd_create_tree(self, start=None):
+        """Make a tree of all the unlocked slots. Or from the slot that is put in the start, can be None."""
+        self.ctx.display_dependencies(start)
 
 class SlotLockContext(CommonContext):
 
@@ -221,16 +221,34 @@ class SlotLockContext(CommonContext):
                     break
 
     #start the display sequence. 
-    def display_dependencies(self):
+    def display_dependencies(self, named):
+        
         temp_slot_dependency = self.slot_dependency.copy()
         for recieve in self.slot_dependency:
             give = self.slot_dependency[recieve]
             if not ((give in self.slot_dependency) or (give < 1)):
                 temp_slot_dependency[give] = -1 #add temp exta things for unhinted games. So they show up as mystery.
 
+        named_num = -1
+        if not named == None:
+            for player in self.players: 
+                if named == player[3]: # find the info on this slot.
+                    named_num = player[1]
+                    break
+            if named_num == -1:
+                for player in self.players: 
+                    if named == player[2]: # find the info on this slot.
+                        named_num = player[1]
+                        break
+            if named_num == -1:
+                logger.info(f"The slot {named} was not found in both the names and the aliases. The search is case sensitive.")
+                return
+            temp_slot_dependency[named_num] = temp_slot_dependency[named_num] or -1
+
+
         for recieve in temp_slot_dependency:
             give = temp_slot_dependency[recieve]
-            if not (give in temp_slot_dependency): #if this slot does not yet have a known game that unlocks it.
+            if (not give in temp_slot_dependency) and named == None or named_num == recieve: #if this slot does not yet have a known game that unlocks it.
                 recieve_name = ""
                 for player in self.players: 
                     if recieve == player[1]: # find the info on this slot.
@@ -238,8 +256,10 @@ class SlotLockContext(CommonContext):
                         break
                 if recieve_name in self.unlocked_slots or self.slot == recieve: #Display the correct game name with current state
                     logger.info(f"{recieve_name}     (Unlocked)")
-                else:
+                elif give == -1:
                     logger.info(f"{recieve_name}     (Mystery)")
+                else:
+                    logger.info(f"{recieve_name}     (Hinted)")
                 self.recusion_display(temp_slot_dependency, recieve, "  |  ") #Start the recusion with a sinlge bar.
 
     def recusion_display(self, temp_slot_dependency, previous_layer, depth):
