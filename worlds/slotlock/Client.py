@@ -1,3 +1,5 @@
+import re
+
 from . import SlotLockWorld
 from CommonClient import ClientCommandProcessor, CommonContext, logger, server_loop, gui_enabled, get_base_parser
 from MultiServer import mark_raw
@@ -38,6 +40,9 @@ class SlotLockCommandProcessor(ClientCommandProcessor):
         """List all unlocked slots."""
         for slot in self.ctx.unlocked_slots:
             logger.info(f"{slot}")
+    def _cmd_create_tree(self):
+        """Make a tree of all the unlocked slots"""
+        self.ctx.display_dependencies()
 
 class SlotLockContext(CommonContext):
 
@@ -51,9 +56,12 @@ class SlotLockContext(CommonContext):
     auto_hint_queue = []
     locked_slots = []
     unlocked_slots = []
+    players = {}
+    slot_dependency = {} #stores a list of all connections: {1:2, 3:2} means 1 gets unlocked by 2. And 3 also gets unlocked by 2.
     use_server_password = False
     connected = False
     has_hinted = []
+
     def __init__(self, server_address=None, password=None):
         CommonContext.__init__(self, server_address, password)
 
@@ -63,24 +71,44 @@ class SlotLockContext(CommonContext):
         await self.get_username()
         await self.send_connect()
     async def run_checking_hints(self):
+
         while True:
             if not self.connected:
                 return
             await self.check_hints()
             await asyncio.sleep(1)
+
     def make_gui(self):
         ui = super().make_gui()
         ui.base_title = "Slotlock Client"
         return ui
+    
+
+#    TODO Make a seperate tab for the tree to reside inside of.
+#    This code already makes the tab, now the thing needs to fill in.
+#    def run_gui(self):
+#        from kvui import GameManager
+#
+#        class SlotlockManager(GameManager):
+#            logging_pairs = [
+#                ("Client", "Archipelago"),
+#                ("SlotlockTree", "Slot Lock Tree"),
+#            ]
+#            base_title = "Archipelago Slotlock Client"
+#
+#        self.ui = SlotlockManager(self)
+#        self.ui_task = asyncio.create_task(self.ui.async_run(), name="UI")
+    
     async def check_hints(self):
         #print("Checking Hints.")
-        if f"_read_hints_{self.team}_{self.slot}" in self.stored_data:
-            hintdata = self.stored_data[f"_read_hints_{self.team}_{self.slot}"].copy()
+        if f"_read_hints_{self.team}_{self.slot}" in self.stored_data: #if hints are in the game
+            hintdata = self.stored_data[f"_read_hints_{self.team}_{self.slot}"].copy() #make a copy
             for slot in self.player_names:
                 player_name = self.player_names[slot]
                 if player_name in self.locked_slots and f"_read_hints_{self.team}_{slot}" in self.stored_data:
                     hintdata.extend(self.stored_data[f"_read_hints_{self.team}_{slot}"])
                     #print(f"{player_name}: {self.stored_data[f"_read_hints_{self.team}_{slot}"]}")
+                    #if a player is locked. Add the hints of that player to the hint data.
             hinted_count = {}
             loc_count = {}
             for location in self.server_locations:
@@ -89,16 +117,17 @@ class SlotLockContext(CommonContext):
                 else:
                     loc_count[location // 10] = 1
             for hint in hintdata:
-                if self.slot_concerns_self(hint["receiving_player"]):
+                if self.slot_concerns_self(hint["receiving_player"]): #if a hint is for slotlock
                     if hint["item"] not in hinted_count:
                         hinted_count[hint["item"]] = 1
                     else:
-                        hinted_count[hint["item"]] += 1
+                        hinted_count[hint["item"]] += 1 #count how often the item is hinted for.
                     if any(item.item == hint["item"] for item in self.items_received):
                         if hasattr(self, "update_hint") and hint["status"] == HintStatus.HINT_PRIORITY:
                             self.update_hint(hint["location"],hint["finding_player"], HintStatus.HINT_NO_PRIORITY)
+                            # remove prio if an item has alreay found.
             if len(self.auto_hint_queue) > 0:
-                await self.send_hint(self.auto_hint_queue.pop(0))
+                await self.send_hint(self.auto_hint_queue.pop(0)) #send a hint that is in the hint queue.
                 await asyncio.sleep(1)
                 self.checking_hints = False
                 return
@@ -132,6 +161,7 @@ class SlotLockContext(CommonContext):
                             pass
                             #print(f"Skipping hint: {hint} because not priority.")
         await asyncio.sleep(1)
+
     async def send_hint(self, item_name):
         if item_name in self.has_hinted:
             return
@@ -139,6 +169,7 @@ class SlotLockContext(CommonContext):
         for loc in self.item_locations[item_name]:
             print(f"{item_name}, {loc}")
             await self.send_msgs([{"cmd": "CreateHints", "player": loc[0], "locations": [loc[1]]}])
+
     def update_auto_locations(self):
         self.unlocked_slots = []
         received_items = [*map(lambda item: self.item_names.lookup_in_game(item.item, "SlotLock"), self.items_received)]
@@ -154,6 +185,66 @@ class SlotLockContext(CommonContext):
                 logger.debug(f"Don't yet have {self.location_names.lookup_in_game(location,"SlotLock")}, required item {self.item_names.lookup_in_game(location // 10)}")
                 pass
 
+    # TODO: add some logic to find if the item comes from a SlotLock. And then route the dependency from Slotlock to the game Slotlock gets the check from.
+    # update the slot_dependency list with the information from the hints.
+    def update_dependency_hint(self):
+        if f"_read_hints_{self.team}_{self.slot}" in self.stored_data:
+            for hint in self.stored_data[f"_read_hints_{self.team}_{self.slot}"]: #loop though all hints
+                item_name = self.item_names.lookup_in_game(hint["item"])
+                if re.match(r"Unlock ", item_name):
+                    player_name = re.sub(r"Unlock ", "", item_name)
+                    for player in self.players:
+                        #players: 0 = team, 1 = slot, 2 = alias, 3 = name
+                        if player_name == player[3]:
+                            self.slot_dependency[player[1]] = hint["finding_player"]
+                            break
+        
+    
+    # update the slot_dependency list with the information from the recieved items.
+    def update_dependency_items(self):
+        if self.slot_dependency == {}: #This if statement will ensure that this slot will be the fist on the list. Ensuring that it will be the first to be displayed.
+            for slot in self.players:
+                #players: 0 = team, 1 = slot, 2 = alias, 3 = name
+                if slot[1] == self.slot: #if it is this slot.
+                    for item in self.items_received:
+                        item_name = self.item_names.lookup_in_game(item.item, "SlotLock")
+                        if f"Unlock {slot[3]}" == item_name: #find where this slot was found, likely from slot 0; archipelago.
+                            self.slot_dependency[slot[1]] = item.player
+                            break
+                break
+        for item in self.items_received:
+            item_name = self.item_names.lookup_in_game(item.item, "SlotLock")
+            for slot in self.players:
+                #players: 0 = team, 1 = slot, 2 = alias, 3 = name
+                if f"Unlock {slot[3]}" == item_name:
+                    self.slot_dependency[slot[1]] = item.player
+                    break
+
+    #start the display sequence. 
+    def display_dependencies(self):
+        for recieve in self.slot_dependency:
+            give = self.slot_dependency[recieve]
+            if not (give in self.slot_dependency): #if this slot does not yet have a known game that unlocks it.
+                recieve_name = ""
+                for player in self.players: 
+                    if recieve == player[1]: # find the info on this slot.
+                        recieve_name = player[2]
+                        break
+                logger.info(f"{recieve_name}") #Display the correct game name
+                self.recusion_display(recieve, "  |  ") #Start the recusion with a sinlge bar.
+
+    def recusion_display(self, previous_layer, depth):
+        for recieve in self.slot_dependency:
+            give = self.slot_dependency[recieve]
+            if give == previous_layer: #if the game is unlocked by the previous layer.
+                recieve_name = ""
+                for player in self.players:
+                    if recieve == player[1]: # find the info on this slot.
+                        recieve_name = player[2]
+                        break
+                logger.info(f"{depth} {recieve_name}") #Display the correct game name With the extra depth part.
+                self.recusion_display(recieve, depth + "  |  ") #do more recursion with an extra line.
+
 
     def on_package(self, cmd: str, args: dict):
         if cmd == "Connected":
@@ -167,6 +258,7 @@ class SlotLockContext(CommonContext):
             self.bonus_item_filler = args["slot_data"]["bonus_item_filler"]
             self.item_locations = args["slot_data"]["item_locations"]
             self.connected = True
+            self.slot_dependency = {}
             asyncio.create_task(self.run_checking_hints())
             try:
                 self.auto_hint_locked_items = args["slot_data"]["auto_hint_locked_items"]
@@ -186,6 +278,7 @@ class SlotLockContext(CommonContext):
                 self.set_notify(slot)
         if cmd == "ReceivedItems" or cmd == "Connected" or cmd == "RoomUpdate":
             self.update_auto_locations()
+            self.update_dependency_items()
             asyncio.create_task(self.send_msgs([{"cmd": "LocationChecks",
                          "locations": list(self.locations_checked)}]))
             victory = True
@@ -205,6 +298,23 @@ class SlotLockContext(CommonContext):
                 print("Victory!")
                 self.finished_game = True
                 asyncio.create_task(self.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}]))
+                
+            if "players" in args:
+                self.players = args["players"]
+                
+        elif cmd == "Retrieved":
+            if f"_read_hints_{self.team}_{self.slot}" in args["keys"]:
+                self.update_dependency_hint()
+
+        elif cmd == "SetReply":
+            if f"_read_hints_{self.team}_{self.slot}" == args["key"]:
+                self.update_dependency_hint()
+
+    
+
+
+
+
 
     async def disconnect(self, allow_autoreconnect: bool = False):
         await super().disconnect(allow_autoreconnect)
@@ -215,6 +325,8 @@ class SlotLockContext(CommonContext):
         self.locations_checked = set()
         self.items_received = []
         self.update_auto_locations()
+    
+    
 
 def launch(*args):
 
