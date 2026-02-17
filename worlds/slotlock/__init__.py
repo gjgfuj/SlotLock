@@ -17,7 +17,10 @@ def launch_client(*args):
         launch(args)
     launch_subprocess(launch, name="SlotLockClient", args=args)
 components.append(Component("Slot Lock Client", "SlotLockClient", func=launch_client,
-                            component_type=Type.CLIENT, supports_uri=True, game_name="SlotLock"))
+                            component_type=Type.CLIENT, supports_uri=True, game_name="SlotLock",
+                            icon="slotlock_icon"))
+
+icon_paths["slotlock_icon"] = f"ap:{__name__}/icons/Slotlock_by_Ruby3440.png"
 
 class LockItem(Item):
     coin_suffix = ""
