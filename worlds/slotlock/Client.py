@@ -1,5 +1,4 @@
 import re
-
 from . import SlotLockWorld
 from CommonClient import ClientCommandProcessor, CommonContext, logger, server_loop, gui_enabled, get_base_parser
 from MultiServer import mark_raw
@@ -61,23 +60,19 @@ class SlotLockContext(CommonContext):
     use_server_password = False
     connected = False
     has_hinted = []
-
     def __init__(self, server_address=None, password=None):
         CommonContext.__init__(self, server_address, password)
 
     async def server_auth(self, password_requested: bool = False):
-        if password_requested and not self.password:
-            await super(TextContext, self).server_auth(password_requested)
+        await super().server_auth(password_requested)
         await self.get_username()
         await self.send_connect()
     async def run_checking_hints(self):
-
         while True:
             if not self.connected:
                 return
             await self.check_hints()
             await asyncio.sleep(1)
-
     def make_gui(self):
         ui = super().make_gui()
         ui.base_title = "Slotlock Client"
@@ -161,7 +156,6 @@ class SlotLockContext(CommonContext):
                             pass
                             #print(f"Skipping hint: {hint} because not priority.")
         await asyncio.sleep(1)
-
     async def send_hint(self, item_name):
         if item_name in self.has_hinted:
             return
@@ -169,7 +163,6 @@ class SlotLockContext(CommonContext):
         for loc in self.item_locations[item_name]:
             print(f"{item_name}, {loc}")
             await self.send_msgs([{"cmd": "CreateHints", "player": loc[0], "locations": [loc[1]]}])
-
     def update_auto_locations(self):
         self.unlocked_slots = []
         received_items = [*map(lambda item: self.item_names.lookup_in_game(item.item, "SlotLock"), self.items_received)]
@@ -374,11 +367,6 @@ class SlotLockContext(CommonContext):
             if f"_read_hints_{self.team}_{self.slot}" == args["key"]:
                 self.update_dependency_hint()
 
-    
-
-
-
-
 
     async def disconnect(self, allow_autoreconnect: bool = False):
         await super().disconnect(allow_autoreconnect)
@@ -389,8 +377,6 @@ class SlotLockContext(CommonContext):
         self.locations_checked = set()
         self.items_received = []
         self.update_auto_locations()
-    
-    
 
 def launch(*args):
 
