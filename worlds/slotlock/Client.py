@@ -251,7 +251,6 @@ class SlotLockContext(CommonContext):
         named_num = -1
         named_is_mystery = True
         if not named == None:
-            logger.info("finding a name")
             for player in self.players: 
                 if named == player[3]: # find the info on this slot.
                     named_num = player[1]
