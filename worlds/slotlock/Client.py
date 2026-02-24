@@ -229,6 +229,9 @@ class SlotLockContext(CommonContext):
     def display_dependencies(self, named):
         
         temp_slot_dependency =  {k: v.copy() for k, v in self.slot_dependency.items()}
+        if len(temp_slot_dependency) == 0:
+            logger.info("No connections have been found.\nAre you sure you are connected to a Slot Lock?")
+            return
         temp_slot_dependency[0] = temp_slot_dependency[0] or []
         temp_slot_dependency[-1] = []
         for key_holder in self.slot_dependency:
@@ -265,7 +268,7 @@ class SlotLockContext(CommonContext):
             if not named_num in temp_slot_dependency[0]:
                 temp_slot_dependency[-1] = [named_num]
 
-
+        display_sting = ""
         for key_holder in [0,-1]:
             cages = temp_slot_dependency[key_holder]
             for cage in cages:
@@ -276,17 +279,20 @@ class SlotLockContext(CommonContext):
                             cage_name = player[2]
                             break
                     if cage_name in self.unlocked_slots or self.slot == cage: #Display the correct game name with current state
-                        logger.info(f"{cage_name}     (Unlocked)")
+                        display_sting = display_sting + f"{cage_name}     (Unlocked)\n"
                     elif key_holder == -1 and named == None or named_is_mystery:
-                        logger.info(f"{cage_name}     (Mystery)")
+                        display_sting = display_sting + f"{cage_name}     (Mystery)\n"
                     else:
-                        logger.info(f"{cage_name}     (Hinted)")
+                        display_sting = display_sting + f"{cage_name}     (Hinted)\n"
                     temp_2_slot_dependency = {k: v.copy() for k, v in temp_slot_dependency.items()}
                     temp_2_slot_dependency[key_holder].remove(cage)
                     if cage in temp_2_slot_dependency:
-                        self.recusion_display(temp_2_slot_dependency, cage, "  |  ") #Start the recusion with a sinlge bar.
+                        display_sting = display_sting + self.recusion_display(temp_2_slot_dependency, cage, "  |  ") #Start the recusion with a sinlge bar.
+        display_sting = display_sting[:-1] #remove last new line. Looks a bit cleaner
+        logger.info(display_sting)
 
     def recusion_display(self, temp_slot_dependency: dict, this_layer, depth):
+        display_sting = ""
         cages = temp_slot_dependency[this_layer]
         for cage in cages:
             cage_name = ""
@@ -295,14 +301,15 @@ class SlotLockContext(CommonContext):
                     cage_name = player[2]
                     break
             if cage_name in self.unlocked_slots: #Display the correct game name with current state and extra depth
-                logger.info(f"{depth}{cage_name}     (Unlocked)")
+                display_sting = display_sting + f"{depth}{cage_name}     (Unlocked)\n"
             else:
-                logger.info(f"{depth}{cage_name}     (Hinted)")
+                display_sting = display_sting + f"{depth}{cage_name}     (Hinted)\n"
             temp_2_slot_dependency = {k: v.copy() for k, v in temp_slot_dependency.items()}
             temp_2_slot_dependency[this_layer].remove(cage)
             if cage in temp_2_slot_dependency:
-                self.recusion_display(temp_2_slot_dependency, cage, depth + "  |  ") #do more recursion with an extra line.
-
+                display_sting = display_sting + self.recusion_display(temp_2_slot_dependency, cage, depth + "  |  ") #do more recursion with an extra line.
+        return display_sting
+    
     def on_package(self, cmd: str, args: dict):
         if cmd == "Connected":
             self.game = self.slot_info[self.slot].game
