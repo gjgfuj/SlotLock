@@ -4,6 +4,7 @@ from CommonClient import ClientCommandProcessor, CommonContext, logger, server_l
 from MultiServer import mark_raw
 from NetUtils import ClientStatus
 from settings import get_settings
+from Utils import async_start
 try:
     from NetUtils import HintStatus
 except ImportError:
@@ -41,7 +42,7 @@ class SlotLockCommandProcessor(ClientCommandProcessor):
             logger.info(f"{slot}")
     def _cmd_create_tree(self, start=None):
         """Make a tree of all the unlocked slots. Or from the slot that is put in the start, can be None."""
-        self.ctx.display_dependencies(start)
+        async_start(self.ctx.display_dependencies(start))
 
 class SlotLockContext(CommonContext):
 
@@ -75,24 +76,8 @@ class SlotLockContext(CommonContext):
             await asyncio.sleep(1)
     def make_gui(self):
         ui = super().make_gui()
-        ui.base_title = "Slotlock Client"
+        ui.base_title = "SlotLock Client"
         return ui
-    
-
-#    TODO Make a seperate tab for the tree to reside inside of.
-#    This code already makes the tab, now the thing needs to fill in.
-#    def run_gui(self):
-#        from kvui import GameManager
-#
-#        class SlotlockManager(GameManager):
-#            logging_pairs = [
-#                ("Client", "Archipelago"),
-#                ("SlotlockTree", "Slot Lock Tree"),
-#            ]
-#            base_title = "Archipelago Slotlock Client"
-#
-#        self.ui = SlotlockManager(self)
-#        self.ui_task = asyncio.create_task(self.ui.async_run(), name="UI")
     
     async def check_hints(self):
         #print("Checking Hints.")
@@ -167,9 +152,10 @@ class SlotLockContext(CommonContext):
         self.unlocked_slots = []
         received_items = [*map(lambda item: self.item_names.lookup_in_game(item.item, "SlotLock"), self.items_received)]
         print(received_items)
-        for slot in self.player_names.values():
-            if f"Unlock {slot}" in received_items:
-                self.unlocked_slots.append(slot)
+        for player in self.players:
+            #players: 0 = team, 1 = slot, 2 = alias, 3 = name
+            if f"Unlock {player[3]}" in received_items:
+                self.unlocked_slots.append(player[3])
         self.locations_checked = set()
         for location in self.missing_locations:
             if any(item.item == location // 10 for item in self.items_received) or (location >= 10000 and self.free_starting_items):
@@ -184,7 +170,7 @@ class SlotLockContext(CommonContext):
         if f"_read_hints_{self.team}_{self.slot}" in self.stored_data:
             for hint in self.stored_data[f"_read_hints_{self.team}_{self.slot}"]: #loop though all hints
                 item_name = self.item_names.lookup_in_game(hint["item"])
-                if re.match(r"Unlock ", item_name):
+                if (re.match(r"Unlock ", item_name) and hint["receiving_player"] == self.slot):
                     player_name = re.sub(r"Unlock ", "", item_name)
                     for player in self.players:
                         #players: 0 = team, 1 = slot, 2 = alias, 3 = name
@@ -194,12 +180,11 @@ class SlotLockContext(CommonContext):
                                     self.slot_dependency[hint["finding_player"]].append(player[1])
                             else:
                                 self.slot_dependency[hint["finding_player"]] = [player[1]]
-                            break
-        
+                            break      
     
     # update the slot_dependency list with the information from the recieved items.
     def update_dependency_items(self):
-        if self.slot_dependency == {}: #This if statement will ensure that this slot will be the fist on the list. Ensuring that it will be the first to be displayed.
+        if self.slot_dependency == {}: #This if statement will ensure that this slot will be the first on the list. Ensuring that it will be the first to be displayed.
             for slot in self.players:
                 #players: 0 = team, 1 = slot, 2 = alias, 3 = name
                 if slot[1] == self.slot: #if it is this slot.
@@ -226,9 +211,11 @@ class SlotLockContext(CommonContext):
                     break
 
     #start the display sequence. 
-    def display_dependencies(self, named):
-        
+    async def display_dependencies(self, named):
         temp_slot_dependency =  {k: v.copy() for k, v in self.slot_dependency.items()}
+        if len(temp_slot_dependency) == 0:
+            logger.info("No connections have been found.\nAre you sure you are connected to a Slot Lock?")
+            return
         temp_slot_dependency[0] = temp_slot_dependency[0] or []
         temp_slot_dependency[-1] = []
         for key_holder in self.slot_dependency:
@@ -256,7 +243,7 @@ class SlotLockContext(CommonContext):
             if named_num == -1:
                 logger.info(f"The slot {named} was not found in both the names and the aliases. The search is case sensitive.")
                 return
-            
+
             for key_holder in self.slot_dependency:
                 if (named_num in self.slot_dependency[key_holder]):
                     named_is_mystery = False
@@ -265,44 +252,89 @@ class SlotLockContext(CommonContext):
             if not named_num in temp_slot_dependency[0]:
                 temp_slot_dependency[-1] = [named_num]
 
+        #logger.info("prep work for the tree.")
 
+        slots_done = []
+        slots_current = [0,-1]
+        while len(slots_current):
+            slots_just_found = []
+            slots_next = []
+            for slot in slots_current:
+                slots_just_found.append(slot)
+                if slot in temp_slot_dependency:
+                    mark_of_removal = []
+                    for unknown in temp_slot_dependency[slot]:
+                        if (unknown in slots_done or unknown in slots_next):
+                            mark_of_removal.append(unknown)
+                        else:
+                            slots_next.append(unknown)
+                    for remove_this in mark_of_removal:
+                        temp_slot_dependency[slot].remove(remove_this)
+            for slot in slots_just_found:
+                slots_done.append(slot)
+            for slot in slots_next:
+                slots_done.append(slot)
+            slots_current = slots_next
+            
+        #logger.info("start creating the tree.")
+
+        display_sting = ""
         for key_holder in [0,-1]:
             cages = temp_slot_dependency[key_holder]
             for cage in cages:
                 if named == None or named_num == cage: #if this slot does not yet have a known game that unlocks it.
+                    cage_alias = ""
                     cage_name = ""
                     for player in self.players: 
+                        #players: 0 = team, 1 = slot, 2 = alias, 3 = name
                         if cage == player[1]: # find the info on this slot.
-                            cage_name = player[2]
+                            cage_alias = player[2]
+                            cage_name = player[3]
                             break
                     if cage_name in self.unlocked_slots or self.slot == cage: #Display the correct game name with current state
-                        logger.info(f"{cage_name}     (Unlocked)")
+                        display_sting = display_sting + f"{cage_alias:27} ({len(self.slot_dependency[cage]) if cage in self.slot_dependency else 0:02}) (Unlocked)\n"
                     elif key_holder == -1 and named == None or named_is_mystery:
-                        logger.info(f"{cage_name}     (Mystery)")
+                        display_sting = display_sting + f"{cage_alias:27} ({len(self.slot_dependency[cage]) if cage in self.slot_dependency else 0:02}) (Mystery)\n"
                     else:
-                        logger.info(f"{cage_name}     (Hinted)")
-                    temp_2_slot_dependency = {k: v.copy() for k, v in temp_slot_dependency.items()}
-                    temp_2_slot_dependency[key_holder].remove(cage)
-                    if cage in temp_2_slot_dependency:
-                        self.recusion_display(temp_2_slot_dependency, cage, "  |  ") #Start the recusion with a sinlge bar.
+                        display_sting = display_sting + f"{cage_alias:27} ({len(self.slot_dependency[cage]) if cage in self.slot_dependency else 0:02}) (Hinted)\n"
+                    if cage in temp_slot_dependency[key_holder]:
+                        temp_2_slot_dependency = {k: v.copy() for k, v in temp_slot_dependency.items()}
+                        temp_2_slot_dependency[key_holder].remove(cage)
+                        if cage in temp_2_slot_dependency:
+                            display_sting = display_sting +  await self.recusion_display(temp_2_slot_dependency, cage, "  |  ") #Start the recusion with a sinlge bar.
 
-    def recusion_display(self, temp_slot_dependency: dict, this_layer, depth):
-        cages = temp_slot_dependency[this_layer]
+        display_sting = display_sting[:-1] #remove last new line. Looks a bit cleaner
+        logger.info(display_sting)
+
+        # delete the '#' on the line below to write to a txt file. The file will endup somewhere. In the same folder this program runs from. Which can be wildy different places depending on the setup used to run this code.
+        #with open("the_Whole_tree.txt", "w") as tree_file:
+        #    tree_file.write(display_sting)
+        #logger.info("Finished creating the tree.")
+
+
+    async def recusion_display(self, temp_slot_dependency: dict, this_layer, depth):
+        display_sting = ""
+        cages = self.slot_dependency[this_layer]
         for cage in cages:
+            cage_alias = ""
             cage_name = ""
             for player in self.players: 
+                #players: 0 = team, 1 = slot, 2 = alias, 3 = name
                 if cage == player[1]: # find the info on this slot.
-                    cage_name = player[2]
+                    cage_alias = player[2]
+                    cage_name = player[3]
                     break
             if cage_name in self.unlocked_slots: #Display the correct game name with current state and extra depth
-                logger.info(f"{depth}{cage_name}     (Unlocked)")
+                display_sting = display_sting + f"{depth}{cage_alias:27} ({len(self.slot_dependency[cage]) if cage in self.slot_dependency else 0:02}) (Unlocked)\n"
             else:
-                logger.info(f"{depth}{cage_name}     (Hinted)")
-            temp_2_slot_dependency = {k: v.copy() for k, v in temp_slot_dependency.items()}
-            temp_2_slot_dependency[this_layer].remove(cage)
-            if cage in temp_2_slot_dependency:
-                self.recusion_display(temp_2_slot_dependency, cage, depth + "  |  ") #do more recursion with an extra line.
-
+                display_sting = display_sting + f"{depth}{cage_alias:27} ({len(self.slot_dependency[cage]) if cage in self.slot_dependency else 0:02}) (Hinted)\n"
+            if cage in temp_slot_dependency[this_layer]:
+                temp_2_slot_dependency = {k: v.copy() for k, v in temp_slot_dependency.items()}
+                temp_2_slot_dependency[this_layer].remove(cage)
+                if cage in temp_2_slot_dependency:
+                    display_sting = display_sting + await self.recusion_display(temp_2_slot_dependency, cage, depth + "  |  ") #do more recursion with an extra line.
+        return display_sting
+    
     def on_package(self, cmd: str, args: dict):
         if cmd == "Connected":
             self.game = self.slot_info[self.slot].game
