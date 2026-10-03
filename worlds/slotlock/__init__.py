@@ -179,6 +179,7 @@ class SlotLockWorld(AutoWorld.World):
         else:
             slots_to_lock = [slot.player_name for slot in self.multiworld.worlds.values() if slot.player_name not in self.options.slots_to_lock.value and slot.player_name != self.player_name]
         slots_to_lock = [slot for slot in slots_to_lock if slot in self.multiworld.world_name_lookup and self.multiworld.player_types[self.multiworld.world_name_lookup[slot]] == SlotType.player]
+        slots_to_lock = sorted(slots_to_lock)
         if self.options.random_unlocked_slots.value > len(slots_to_lock):
             raise RuntimeError("Too many random unlocked slots.")
         for i in range(self.options.random_unlocked_slots.value):
