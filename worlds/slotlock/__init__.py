@@ -52,7 +52,7 @@ class SlotsToLockWhitelistOption(Toggle):
     pass
 class FreeSlotItems(Toggle):
     """If true, the free items should be sent out immediately for locked worlds, or if false the 'Unlock {slot_name}' item will be required. If false, it will require other worlds to be open in sphere 1 instead else there will be no worlds available."""
-    default = 1
+    default = 0
     pass
 class FreeUnlockedWorldItems(Range):
     """Adds filler and locations equal to this number, per starting slot of the world."""
