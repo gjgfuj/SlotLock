@@ -1,6 +1,8 @@
 from dataclasses import dataclass
-from typing import Any, Dict
-from BaseClasses import CollectionState, Item, ItemClassification, Location, MultiWorld, Region
+from typing import Any, Dict, Set, List
+
+import Fill
+from BaseClasses import CollectionState, Item, ItemClassification, Location, MultiWorld, Region, LocationProgressType
 from Options import OptionSet, PerGameCommonOptions, Range, StartInventoryPool, Toggle, Choice, OptionDict
 import worlds
 from worlds import AutoWorld
@@ -23,9 +25,11 @@ components.append(Component("Slot Lock Client", "SlotLockClient", func=launch_cl
 icon_paths["slotlock_icon"] = f"ap:{__name__}/icons/Slotlock_by_Ruby3440.png"
 
 class LockItem(Item):
-    coin_suffix = ""
+    coin_suffix = "" #I forget what this is here for
     def __init__(self, world: "SlotLockWorld", player: int):
         Item.__init__(self,f"Unlock {world.multiworld.worlds[player].player_name}",ItemClassification.progression,player+1001,world.player)
+        self.game = "SlotLock"
+        self.unlock_player = player
 class LockLocation(Location):
     pass
 
@@ -85,7 +89,13 @@ class AutoHintLockedItems(Toggle):
 class AssociatedWorlds(OptionDict):
     """Allows you to associate a list of worlds with another world. These worlds slot unlocks will then be unlocked at the same time as the primary world. Format `WorldName: [AssociatedWorld1,AssociatedWorld2]`. The maximum number of associated worlds per world is 10, and will cause the associated world to only have 1 copy of its world."""
     pass
-
+class LinearFill(Toggle):
+    """If true, will attempt a linear fill where each locked world's items are only available in spheres after that world is unlocked. (EXPERIMENTAL)"""
+    default = 0
+    option_no = 0
+    option_yes = 1
+    alias_true = 1
+    alias_false = 0
 @dataclass
 class SlotLockOptions(PerGameCommonOptions):
     slots_to_lock: SlotsToLock
@@ -100,6 +110,7 @@ class SlotLockOptions(PerGameCommonOptions):
     random_unlocked_slots: RandomUnlockedSlots
     auto_hint_locked_items: AutoHintLockedItems
     associated_worlds: AssociatedWorlds
+    linear_fill: LinearFill
 
 class SlotLockWorld(AutoWorld.World):
     """Locks other player slots."""
@@ -314,6 +325,82 @@ class SlotLockWorld(AutoWorld.World):
                     multiworld.early_items[world.player] = {}
                     multiworld.local_early_items[world.player] = {}
                     world.options.progression_balancing.value = 0
+    def fill_hook(self,
+                  progitempool: List["Item"],
+                  usefulitempool: List["Item"],
+                  filleritempool: List["Item"],
+                  fill_locations: List["Location"]) -> None:
+        if self.options.linear_fill.value == 1:
+            self.linear_fill(progitempool, fill_locations)
+    def get_temp_spheres(self, slot_locking_items, other_item_pool):
+        state = CollectionState(self.multiworld)
+        for i in other_item_pool:
+            state.collect(i, True)
+        locations = set(self.multiworld.get_locations())
+        filled_locations = set(self.multiworld.get_filled_locations())
+
+        while locations:
+            sphere: Set[Location] = set()
+
+            for location in locations:
+                if location.can_reach(state):
+                    sphere.add(location)
+            yield sphere
+            if not sphere:
+                if locations:
+                    yield locations  # unreachable locations
+                break
+
+            for location in sphere:
+                if location.item:
+                    state.collect(location.item, True, location)
+            locations -= sphere
+    def linear_fill(self, progitems: List[Item], locations: List[Location]):
+        print(f"{self.player_name} Linear Fill phase 1: Filling slot unlock items.")
+        slot_locking_items = []
+        for item in progitems:
+            if item.player == self.player and isinstance(item, LockItem):
+                slot_locking_items.append(item)
+        for item in slot_locking_items:
+            progitems.remove(item)
+        fillpool = slot_locking_items.copy()
+        fill_state = Fill.sweep_from_pool(self.multiworld.state, progitems)
+        Fill.fill_restrictive(self.multiworld, fill_state, locations,fillpool, name=f"{self.player_name} Slot Unlocks")
+        spheres = list(self.get_temp_spheres(slot_locking_items, progitems))
+        sphere_unlocks = {}
+        for sphere in range(len(spheres)):
+            #print(f"Sphere {sphere} with {len(spheres[sphere])}")
+            sphere_unlocks[sphere] = set()
+            for loc in spheres[sphere]:
+                if loc.item and loc.item.player == self.player:
+                    sphere_unlocks[sphere].add(loc.item)
+                    #print(f"{sphere}: {loc.name} has {loc.item.name}")
+            if not sphere_unlocks[sphere]:
+                sphere_unlocks.pop(sphere)
+        fillpool = []
+        for sphere in reversed(sorted(sphere_unlocks.keys())):
+            print(f"{self.player_name} Linear Fill Phase 2: Filling sphere {sphere+1}")
+            for unlock_item in sphere_unlocks[sphere]:
+                fillpool += filter(lambda item,player=unlock_item.unlock_player: item.player == player, progitems)
+            for i in fillpool:
+                progitems.remove(i)
+            filllocations = []
+            for later_sphere in range(sphere+1, len(spheres)):
+                filllocations += filter(lambda location: location.item is None, spheres[later_sphere])
+            filllocations_priority = list(filter(lambda location: location.progress_type == LocationProgressType.PRIORITY, filllocations))
+            for i in filllocations_priority:
+                filllocations.remove(i)
+                locations.remove(i)
+            for i in filllocations:
+                locations.remove(i)
+
+            fill_state = Fill.sweep_from_pool(self.multiworld.state, progitems)
+            Fill.fill_restrictive(self.multiworld, fill_state, filllocations_priority, fillpool,
+                                  name=f"{self.player_name} Linear Fill Sphere {sphere} Priority", allow_partial=True)
+            Fill.fill_restrictive(self.multiworld, fill_state, filllocations, fillpool,
+                                  name=f"{self.player_name} Linear Fill Sphere {sphere}")
+            locations += filllocations
+            locations += filllocations_priority
 
     def set_rules(self) -> None:
         self.multiworld.completion_condition[self.player] = lambda state: state.has_all([f"Unlock {i}" for i in self.slots_to_lock] + [f"Unlock Bonus Slot {i+1}" for i in range(self.options.bonus_item_slots.value)], self.player)
@@ -355,7 +442,7 @@ class SlotLockWorld(AutoWorld.World):
         if res and "Unlock " in item.name and item.name.split("Unlock ")[1] in self.slots_to_lock:
             player_name = item.name.split("Unlock ")[1]
             for world in self.multiworld.worlds:
-                if world.player_name == player_name:
+                if self.multiworld.worlds[world].player_name == player_name:
                     state.update_reachable_regions(world)
                     # print(f"Marking {player_name} as stale due to removal of {item.name}")
         return res
