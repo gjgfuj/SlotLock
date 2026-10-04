@@ -372,7 +372,7 @@ class SlotLockWorld(AutoWorld.World):
             #print(f"Sphere {sphere} with {len(spheres[sphere])}")
             sphere_unlocks[sphere] = set()
             for loc in spheres[sphere]:
-                if loc.item and loc.item.player == self.player:
+                if loc.item and loc.item.player == self.player and not any(map(lambda sphere: loc.item in sphere_unlocks[sphere], range(sphere))):
                     sphere_unlocks[sphere].add(loc.item)
                     #print(f"{sphere}: {loc.name} has {loc.item.name}")
             if not sphere_unlocks[sphere]:
