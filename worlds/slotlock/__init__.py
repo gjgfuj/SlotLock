@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from typing import Any, Dict, Set, List
 
@@ -184,7 +185,6 @@ class SlotLockWorld(AutoWorld.World):
             # UT has no way to get the unlock items so just skip locking altogether
             return
 
-        #print(self.location_name_to_id)
         if self.options.slots_whitelist.value:
             slots_to_lock = [slot for slot in self.options.slots_to_lock.value if any(slot == world.player_name for world in self.multiworld.worlds.values())]
         else:
@@ -195,7 +195,7 @@ class SlotLockWorld(AutoWorld.World):
             raise RuntimeError("Too many random unlocked slots.")
         for i in range(self.options.random_unlocked_slots.value):
             slots_to_lock.remove(self.random.choice(slots_to_lock))
-        print(f"{self.player_name}: Locking {slots_to_lock}")
+        logging.info(f"{self.player_name}: Locking {slots_to_lock}")
         self.slots_to_lock = slots_to_lock
         for world in self.options.associated_worlds:
             for associated_world in self.options.associated_worlds[world]:
@@ -253,7 +253,7 @@ class SlotLockWorld(AutoWorld.World):
                             self.multiworld.itempool.pop(index)
                             fixedLocations.append(location)
                         else:
-                            print(f"{self.player_name} Warning: associated world {associated_world} not real world.")
+                            logging.warning(f"{self.player_name} Warning: associated world {associated_world} not real world.")
                 self.region.get_locations().extend(fixedLocations)
 
             else:
@@ -313,13 +313,11 @@ class SlotLockWorld(AutoWorld.World):
                     for exit in currentOrigin.get_exits():
                         old_rule = exit.access_rule
                         def rule(state: CollectionState, self=self, world=world, old_rule=old_rule):
-                            #print(f"Lock Rule Called for {world.player}, value {state.has(f"Unlock_{world.player}",self.player)}")
                             return state.has(f"Unlock {world.player_name}",self.player) and old_rule(state)
                         exit.access_rule = rule
                     for location in currentOrigin.get_locations():
                         old_rule = location.access_rule
                         def rule(state: CollectionState, self=self, world=world, old_rule=old_rule):
-                            #print(f"Lock Rule Called for {world.player}, value {state.has(f"Unlock_{world.player}",self.player)}")
                             return state.has(f"Unlock {world.player_name}",self.player) and old_rule(state)
                         location.access_rule = rule
                     multiworld.early_items[world.player] = {}
@@ -356,7 +354,7 @@ class SlotLockWorld(AutoWorld.World):
                     state.collect(location.item, True, location)
             locations -= sphere
     def linear_fill(self, progitems: List[Item], locations: List[Location]):
-        print(f"{self.player_name} Linear Fill phase 1: Filling slot unlock items.")
+        logging.info(f"{self.player_name} Linear Fill Phase 1: Filling slot unlock items.")
         slot_locking_items = []
         for item in progitems:
             if item.player == self.player and isinstance(item, LockItem):
@@ -369,17 +367,17 @@ class SlotLockWorld(AutoWorld.World):
         spheres = list(self.get_temp_spheres(slot_locking_items, progitems))
         sphere_unlocks = {}
         for sphere in range(len(spheres)):
-            #print(f"Sphere {sphere} with {len(spheres[sphere])}")
+            logging.debug(f"Sphere {sphere} with {len(spheres[sphere])}")
             sphere_unlocks[sphere] = set()
             for loc in spheres[sphere]:
                 if loc.item and loc.item.player == self.player and not any(map(lambda sphere: loc.item in sphere_unlocks[sphere], range(sphere))):
                     sphere_unlocks[sphere].add(loc.item)
-                    #print(f"{sphere}: {loc.name} has {loc.item.name}")
+                    logging.debug(f"{sphere}: {loc.name} has {loc.item.name}")
             if not sphere_unlocks[sphere]:
                 sphere_unlocks.pop(sphere)
         fillpool = []
         for sphere in reversed(sorted(sphere_unlocks.keys())):
-            print(f"{self.player_name} Linear Fill Phase 2: Filling sphere {sphere+1}")
+            logging.info(f"{self.player_name} Linear Fill Phase 2: Filling sphere {sphere+1}")
             for unlock_item in sphere_unlocks[sphere]:
                 fillpool += filter(lambda item,player=unlock_item.unlock_player: item.player == player, progitems)
             for i in fillpool:
@@ -396,9 +394,9 @@ class SlotLockWorld(AutoWorld.World):
 
             fill_state = Fill.sweep_from_pool(self.multiworld.state, progitems)
             Fill.fill_restrictive(self.multiworld, fill_state, filllocations_priority, fillpool,
-                                  name=f"{self.player_name} Linear Fill Sphere {sphere} Priority", allow_partial=True)
+                                  name=f"{self.player_name} Linear Fill Sphere {sphere+1} Priority", allow_partial=True)
             Fill.fill_restrictive(self.multiworld, fill_state, filllocations, fillpool,
-                                  name=f"{self.player_name} Linear Fill Sphere {sphere}")
+                                  name=f"{self.player_name} Linear Fill Sphere {sphere+1}")
             locations += filllocations
             locations += filllocations_priority
 
@@ -435,7 +433,6 @@ class SlotLockWorld(AutoWorld.World):
             for world in self.multiworld.worlds:
                 if self.multiworld.worlds[world].player_name == player_name:
                     state.update_reachable_regions(world)
-                    # print(f"Marking {player_name} as stale due to collection of {item.name}")
         return res
     def remove(self,state: CollectionState, item: Item):
         res = super().remove(state,item)
@@ -444,7 +441,6 @@ class SlotLockWorld(AutoWorld.World):
             for world in self.multiworld.worlds:
                 if self.multiworld.worlds[world].player_name == player_name:
                     state.update_reachable_regions(world)
-                    # print(f"Marking {player_name} as stale due to removal of {item.name}")
         return res
     def modify_multidata(self, multidata: Dict[str, Any]):
         if len(self.slots_to_lock) == 0:
