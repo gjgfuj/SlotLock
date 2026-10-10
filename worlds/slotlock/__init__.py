@@ -199,9 +199,14 @@ class SlotLockWorld(AutoWorld.World):
         slots_to_lock = [slot for slot in slots_to_lock if slot in self.multiworld.world_name_lookup and self.multiworld.player_types[self.multiworld.world_name_lookup[slot]] == SlotType.player]
         slots_to_lock = sorted(slots_to_lock)
         if self.options.random_unlocked_slots.value > len(slots_to_lock):
-            raise RuntimeError("Too many random unlocked slots.")
+            raise RuntimeError(f"[{self.player_name}] Too many random unlocked slots. Lock more slots, or reduce random_unlocked_slots")
         for i in range(self.options.random_unlocked_slots.value):
             slots_to_lock.remove(self.random.choice(slots_to_lock))
+
+        # Conservative check if all slots are locked and there are no starting locations in SlotLock
+        if len(slots_to_lock) >= len(list(filter(lambda s: self.multiworld.player_types[self.multiworld.world_name_lookup[s]] == SlotType.player,
+                                                    self.multiworld.world_name_lookup))) - 1 and self.options.free_starting_items == 0 and self.options.free_unlocked_world_items == 0:
+            raise RuntimeError(f"[{self.player_name}] No sphere 1 remaining in the multiworld. To fix this, either:\n* Set a slot as unlocked in slots_to_lock, \n* Set random_unlocked_slots to 1 or higher,\n* Set free_starting_items to true, or \n* Set free unlocked world items to 1 or higher.")
         logging.info(f"{self.player_name}: Locking {slots_to_lock}")
         self.slots_to_lock = slots_to_lock
         for world in self.options.associated_worlds:
