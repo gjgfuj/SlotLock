@@ -141,6 +141,7 @@ class SlotLockContext(CommonContext):
                             pass
                             #print(f"Skipping hint: {hint} because not priority.")
         await asyncio.sleep(1)
+        
     async def send_hint(self, item_name):
         if item_name in self.has_hinted:
             return
@@ -148,6 +149,7 @@ class SlotLockContext(CommonContext):
         for loc in self.item_locations[item_name]:
             print(f"{item_name}, {loc}")
             await self.send_msgs([{"cmd": "CreateHints", "player": loc[0], "locations": [loc[1]]}])
+
     def update_auto_locations(self):
         self.unlocked_slots = []
         received_items = [*map(lambda item: self.item_names.lookup_in_game(item.item, "SlotLock"), self.items_received)]
@@ -182,7 +184,7 @@ class SlotLockContext(CommonContext):
                                 self.slot_dependency[hint["finding_player"]] = [player[1]]
                             break      
     
-    # update the slot_dependency list with the information from the recieved items.
+    # update the slot_dependency list with the information from the received items.
     def update_dependency_items(self):
         if self.slot_dependency == {}: #This if statement will ensure that this slot will be the first on the list. Ensuring that it will be the first to be displayed.
             for slot in self.players:
@@ -226,7 +228,7 @@ class SlotLockContext(CommonContext):
                     nothing = False
                     break
             if nothing and key_holder > 1:
-                temp_slot_dependency[-1].append(key_holder) #add temp exta things for unhinted games. So they show up as mystery.
+                temp_slot_dependency[-1].append(key_holder) #add temp extra things for unhinted games. So they show up as mystery.
 
         named_num = -1
         named_is_mystery = True
