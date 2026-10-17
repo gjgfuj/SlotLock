@@ -399,7 +399,7 @@ class SlotLockWorld(AutoWorld.World):
         for sphere in reversed(sorted(sphere_unlocks.keys())):
             logging.info(f"{self.player_name} Linear Fill Phase 2: Filling sphere {sphere+1}")
             for unlock_item in sphere_unlocks[sphere]:
-                fillpool += filter(lambda item,player=unlock_item.unlock_player: item.player == player and item not in fillpool, progitems)
+                fillpool += filter(lambda item,player=unlock_item.unlock_player: item.player == player, progitems)
 
             amount_of_items = floor((len(fillpool) * (self.options.linear_fill.value / 100)))
             logging.debug(f"with {amount_of_items} / {len(fillpool)}")
@@ -421,11 +421,16 @@ class SlotLockWorld(AutoWorld.World):
                 locations.remove(i)
             for i in filllocations:
                 locations.remove(i)
-
-            fill_state = Fill.sweep_from_pool(self.multiworld.state, progitems)
-            Fill.fill_restrictive(self.multiworld, fill_state, filllocations_priority, thisfillpool,
+            priority_items = list(filter(lambda item: not item.deprioritized, thisfillpool))
+            for i in priority_items:
+                thisfillpool.remove(i)
+            fill_state = Fill.sweep_from_pool(self.multiworld.state, progitems + fillpool + thisfillpool)
+            Fill.fill_restrictive(self.multiworld, fill_state, filllocations_priority, priority_items,
                                   name=f"{self.player_name} Linear Fill Sphere {sphere+1} Priority", allow_partial=True)
+            thisfillpool += priority_items
+            self.random.shuffle(thisfillpool)
             filllocations += filllocations_priority
+            fill_state = Fill.sweep_from_pool(self.multiworld.state, progitems + fillpool)
             Fill.fill_restrictive(self.multiworld, fill_state, filllocations, thisfillpool,
                                   name=f"{self.player_name} Linear Fill Sphere {sphere+1}")
             locations += filllocations
