@@ -1,17 +1,14 @@
 import logging
-from dataclasses import dataclass
 from math import floor
 from typing import Any, Dict, Set, List, TextIO
 
 import Fill
 from BaseClasses import CollectionState, Item, ItemClassification, Location, MultiWorld, Region, LocationProgressType
-from Options import OptionSet, PerGameCommonOptions, Range, StartInventoryPool, Toggle, Choice, OptionDict
 import worlds
 from worlds import AutoWorld
-from worlds.generic import GenericWorld
 from worlds.LauncherComponents import Component, components, icon_paths, launch_subprocess, Type
 from NetUtils import Hint, SlotType
-from settings import Group
+from .Options import *
 
 def launch_client(*args):
     from .Client import launch
@@ -35,89 +32,10 @@ class LockItem(Item):
 class LockLocation(Location):
     pass
 
-class SlotsToLock(OptionSet):
-    """A list of slot player names to add a lock item to"""
-    pass
-class NumberOfUnlocks(Range):
-    """Number of copies of each unlock item to include."""
-    default = 1
-    range_start = 1
-    range_end = 10
-class UnlockItemFiller(Range):
-    """Number of additional locations for the world unlock slots. This amount is capped to 10, and automatically includes any copies of the bonus item key plus the additional locations here. The additional locations each add a Nothing item to the pool."""
-    default = 0
-    range_start = 0
-    range_end = 9
-class SlotsToLockWhitelistOption(Toggle):
-    """If the list of slots to lock should be treated as a blacklist rather than a whitelist. If true, will lock every slot listed. If false, will lock every slot except this one and any slot listed."""
-    default = 1
-    pass
-class FreeSlotItems(Toggle):
-    """If true, the free items should be sent out immediately for locked worlds, or if false the 'Unlock {slot_name}' item will be required. If false, it will require other worlds to be open in sphere 1 instead else there will be no worlds available."""
-    default = 0
-    pass
-class FreeUnlockedWorldItems(Range):
-    """Adds filler and locations equal to this number, per starting slot of the world."""
-    default = 0
-    range_start = 0
-    range_end = 10
-class BonusItemSlots(Range):
-    """Number of bonus item slots to include. These will be automatically unlocked when sent their individual keys."""
-    default = 0
-    range_start = 0
-    range_end = 1000
-class BonusItemDupes(Range):
-    """Number of copies of bonus slot unlocks."""
-    default = 1
-    range_start = 1
-    range_end = 10
-class BonusItemFiller(Range):
-    """Number of additional locations for the bonus item slots. This amount is capped to 10, and automatically includes any copies of the bonus item key plus the additional locations here."""
-    default = 0
-    range_start = 0
-    range_end = 9
-class RandomUnlockedSlots(Range):
-    """Number of slots to randomly start with, from the slots that are locked."""
-    default = 0
-    range_start = 0
-    range_end = 100
-class AutoHintLockedItems(Toggle):
-    """Whether the slotlock client should automatically scout locations in other worlds where its items are if one of its items are hinted."""
-    default = 0
-    option_no = 0
-    option_yes = 1
-    alias_true = 1
-    alias_false = 0
-class AssociatedWorlds(OptionDict):
-    """Allows you to associate a list of worlds with another world. These worlds slot unlocks will then be unlocked at the same time as the primary world. Format `WorldName: [AssociatedWorld1,AssociatedWorld2]`. The maximum number of associated worlds per world is 10, and will cause the associated world to only have 1 copy of its world."""
-    pass
-class LinearFill(Range):
-    """If greater than 0, will attempt a linear fill where each locked world's items are only available in spheres after that world is unlocked, for x% of each world's progression items. (EXPERIMENTAL)"""
-    default = 0
-    range_start = 0
-    range_end = 100
-    option_none = 0
-    option_full = 100
-    alias_no = 0
-    alias_yes = 100
-    alias_true = 100
-    alias_false = 0
-@dataclass
-class SlotLockOptions(PerGameCommonOptions):
-    slots_to_lock: SlotsToLock
-    slots_whitelist: SlotsToLockWhitelistOption
-    unlock_item_copies: NumberOfUnlocks
-    unlock_item_filler: UnlockItemFiller
-    bonus_item_slots: BonusItemSlots
-    bonus_item_copies: BonusItemDupes
-    bonus_item_filler: BonusItemFiller
-    free_starting_items: FreeSlotItems
-    free_unlocked_world_items: FreeUnlockedWorldItems
-    random_unlocked_slots: RandomUnlockedSlots
-    auto_hint_locked_items: AutoHintLockedItems
-    associated_worlds: AssociatedWorlds
-    linear_fill: LinearFill
 
+class SlotLockWebWorld(AutoWorld.WebWorld):
+    theme = "ice"
+    tutorials = []
 class SlotLockWorld(AutoWorld.World):
     """Locks other player slots."""
 
@@ -128,6 +46,7 @@ class SlotLockWorld(AutoWorld.World):
     item_name_to_id = {f"Unlock_{num+1}": num+1001 for num in range(5000)}
     item_name_to_id["Nothing"] = 6999
     multiworld : MultiWorld
+    web = SlotLockWebWorld()
     for i in range(1000):
         item_name_to_id[f"Unlock Bonus Slot {i+1}"] = i + 1
         for j in range(10):
