@@ -61,15 +61,18 @@ class SlotLockWorld(AutoWorld.World):
     def __init__(self, multiworld, player):
         super().__init__(multiworld, player)
     def create_item(self, name: str):
-        if "Unlock_" in name:
-            return self.create_slotlock_item(self.multiworld.player_name[int(name.split("_")[1])])
-        elif "Unlock Bonus Slot" in name:
-            return self.create_bonus_key(int(name.split("Slot ")[1]))
-        elif "Unlock " in name:
-            return self.create_slotlock_item(name.split("lock ")[1])
-        elif name == "Nothing":
-            return Item(name,ItemClassification.filler,6999, self.player)
-        raise Exception("Invalid item name")
+        try:
+            if "Unlock_" in name:
+                return self.create_slotlock_item(self.multiworld.player_name[int(name.split("_")[1])])
+            elif "Unlock Bonus Slot" in name:
+                return self.create_bonus_key(int(name.lstrip("Unlock Bonus Slot ")))
+            elif "Unlock " in name:
+                return self.create_slotlock_item(name.lstrip("Unlock "))
+            elif name == "Nothing":
+                return Item(name,ItemClassification.filler,6999, self.player)
+        except KeyError:
+            pass
+        raise Exception(f"Invalid item name: {name}")
     @classmethod
     def stage_generate_early(cls, multiworld: "MultiWorld"):
         item_name_to_id = {}
@@ -195,6 +198,10 @@ class SlotLockWorld(AutoWorld.World):
                         self.region.add_locations({f"Free Item {world.player_name} {i+1}": self.location_name_to_id[f"Free Item {world.player_name} {i+1}"]}, LockLocation)
                 except AttributeError:
                     pass
+
+            class FakeOption:
+                def __init__(self, value):
+                    self.value = value
             if self.multiworld.player_types[world.player] == SlotType.player:
                 add_slot_location_to_option(self.options.exclude_locations, world)
                 add_slot_location_to_option(self.options.priority_locations, world)
@@ -203,6 +210,9 @@ class SlotLockWorld(AutoWorld.World):
                 add_slot_item_to_option(self.options.non_local_items, world)
                 add_slot_item_to_option(self.options.start_hints, world)
                 add_slot_item_to_option(self.options.start_inventory, world)
+                for plando_block in self.options.plando_items:
+                    add_slot_item_to_option(FakeOption(plando_block.items), world)
+                    add_slot_location_to_option(FakeOption(plando_block.locations), world)
         for world in range(5001):
             remove_slot_location_from_option(self.options.exclude_locations, world)
             remove_slot_location_from_option(self.options.priority_locations, world)
@@ -211,6 +221,9 @@ class SlotLockWorld(AutoWorld.World):
             remove_slot_item_from_option(self.options.non_local_items, world)
             remove_slot_item_from_option(self.options.start_hints, world)
             remove_slot_item_from_option(self.options.start_inventory, world)
+            for plando_block in self.options.plando_items:
+                remove_slot_item_from_option(FakeOption(plando_block.items), world)
+                remove_slot_location_from_option(FakeOption(plando_block.locations), world)
         self.multiworld.regions.append(self.region)
         for bonusSlot in range(self.options.bonus_item_slots.value):
             bonusSlotRegion = Region(f"Bonus Slot {bonusSlot+1}", self.player, self.multiworld)
