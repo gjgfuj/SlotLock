@@ -5,6 +5,8 @@ from MultiServer import mark_raw
 from NetUtils import ClientStatus
 from settings import get_settings
 from Utils import async_start
+from .. import AutoWorldRegister
+
 try:
     from NetUtils import HintStatus
 except ImportError:
@@ -76,7 +78,7 @@ class SlotLockContext(CommonContext):
             await asyncio.sleep(1)
     def make_gui(self):
         ui = super().make_gui()
-        ui.base_title = "SlotLock Client"
+        ui.base_title = f"SlotLock {SlotLockWorld.world_version} Client"
         return ui
     
     async def check_hints(self):
