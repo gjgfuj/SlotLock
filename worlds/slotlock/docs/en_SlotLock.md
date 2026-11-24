@@ -18,3 +18,9 @@ Open the SlotLock client (using the archipelago launcher), and log into the serv
 These checks are obtainable after collecting a slot unlock, and are sent by just having the SlotLock client open.  
 ### I'm receiving progression items from unlocking slots, how do i stop this from happening?
 To do this, you need to put `Slot Rewards` into the `excluded_locations` section of your yaml (at the very bottom).
+
+#  YAML Guide:
+This section of the guide will cover the parts of the yaml that may seem confusing at a first glance, like `Linear Fill` or Associated Worlds. 
+### Bonus/Copy Settings
+These settings allow for Copies, or "Bonus", versions of items to be placed into the pool. This can do various things, like allow for more free items from collecting a slot unlock, or add more versions of each slot unlock into the pool. A full list of what each of these bonus settings are called and what they do can be found below.
+(leave blank for now, i'm at college and do not have the time to finish it until later).
