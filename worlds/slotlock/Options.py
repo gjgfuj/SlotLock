@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 
-from Options import OptionSet, PerGameCommonOptions, Range, StartInventoryPool, Toggle, Choice, OptionDict
+from Options import OptionSet, PerGameCommonOptions, Range, StartInventoryPool, Toggle, Choice, OptionDict, OptionGroup
 
 
 class SlotsToLock(OptionSet):
-    """A list of slot player names to add a lock item to"""
+    """A list of slot player names to add a lock item to."""
     pass
 class NumberOfUnlocks(Range):
     """Number of copies of each unlock item to include."""
@@ -16,9 +16,17 @@ class UnlockItemFiller(Range):
     default = 0
     range_start = 0
     range_end = 9
-class SlotsToLockWhitelistOption(Toggle):
-    """If the list of slots to lock should be treated as a blacklist rather than a whitelist. If true, will lock every slot listed. If false, will lock every slot except this one and any slot listed."""
-    default = 1
+class SlotLockListMode(Choice):
+    """Defines how the slots_to_lock list works.
+
+    - **Whitelist**: the slots listed will get locked
+                     the slots not listed will be open from the start
+    - **Blacklist**: the slots listed will be open from the start
+                     the slots not listed will get locked
+    """
+    option_whitelist = 0
+    option_blacklist = 1
+    default = option_whitelist
     pass
 class FreeSlotItems(Toggle):
     """If true, the free items should be sent out immediately for locked worlds, or if false the 'Unlock {slot_name}' item will be required. If false, it will require other worlds to be open in sphere 1 instead else there will be no worlds available."""
@@ -73,7 +81,7 @@ class LinearFill(Range):
 @dataclass
 class SlotLockOptions(PerGameCommonOptions):
     slots_to_lock: SlotsToLock
-    slots_whitelist: SlotsToLockWhitelistOption
+    slot_lock_list_mode: SlotLockListMode
     unlock_item_copies: NumberOfUnlocks
     unlock_item_filler: UnlockItemFiller
     bonus_item_slots: BonusItemSlots
@@ -85,3 +93,25 @@ class SlotLockOptions(PerGameCommonOptions):
     auto_hint_locked_items: AutoHintLockedItems
     associated_worlds: AssociatedWorlds
     linear_fill: LinearFill
+
+option_groups = [
+    OptionGroup("Slot Unlock Options", [
+        NumberOfUnlocks,
+        UnlockItemFiller,
+        FreeUnlockedWorldItems,
+    ]),
+    OptionGroup("Bonus Slot Options", [
+        BonusItemSlots,
+        BonusItemDupes,
+        BonusItemFiller
+    ]),
+    OptionGroup("Start Options", [
+        FreeSlotItems,
+        RandomUnlockedSlots
+    ]),
+    OptionGroup("Other Options", [
+        AutoHintLockedItems,
+        AssociatedWorlds,
+        LinearFill
+    ])
+]
