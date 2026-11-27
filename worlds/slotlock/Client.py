@@ -78,7 +78,7 @@ class SlotLockContext(CommonContext):
             await asyncio.sleep(1)
     def make_gui(self):
         ui = super().make_gui()
-        ui.base_title = f"SlotLock {SlotLockWorld.world_version} Client"
+        ui.base_title = f"SlotLock {SlotLockWorld.world_version.major}.{SlotLockWorld.world_version.minor}.{SlotLockWorld.world_version.build} Client"
         return ui
     
     async def check_hints(self):
