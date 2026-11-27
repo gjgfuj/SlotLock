@@ -36,6 +36,8 @@ class LockLocation(Location):
 class SlotLockWebWorld(AutoWorld.WebWorld):
     theme = "ice"
     tutorials = []
+
+    option_groups = option_groups
 class SlotLockWorld(AutoWorld.World):
     """Locks other player slots."""
 
@@ -114,10 +116,13 @@ class SlotLockWorld(AutoWorld.World):
             # UT has no way to get the unlock items so just skip locking altogether
             return
 
-        if self.options.slots_whitelist.value:
+        if self.options.slot_lock_list_mode.value == "whitelist":
             slots_to_lock = [slot for slot in self.options.slots_to_lock.value if any(slot == world.player_name for world in self.multiworld.worlds.values())]
-        else:
+        elif self.options.slot_lock_list_mode.value == "blacklist":
             slots_to_lock = [slot.player_name for slot in self.multiworld.worlds.values() if slot.player_name not in self.options.slots_to_lock.value and slot.player_name != self.player_name]
+        else:
+            # something went horribly wrong
+            raise RuntimeError(f"[{self.player_name}] Invalid option for 'slot_lock_list_mode': {self.options.slot_lock_list_mode.value}")
         slots_to_lock = [slot for slot in slots_to_lock if slot in self.multiworld.world_name_lookup and self.multiworld.player_types[self.multiworld.world_name_lookup[slot]] == SlotType.player]
         slots_to_lock = sorted(slots_to_lock)
         if self.options.random_unlocked_slots.value > len(slots_to_lock):
